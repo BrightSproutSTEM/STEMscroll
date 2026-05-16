@@ -29,30 +29,43 @@ export default function FeedScreen() {
     return height - tabBar;
   }, [height]);
 
+  // Stable string of topics for dep tracking — avoids array-identity churn
+  const topicsKey = (user?.selected_topics || []).slice().sort().join(",");
+  const ageMode = user?.age_mode;
+  const loadedKeyRef = useRef<string>("");
+
   const load = useCallback(async () => {
+    if (!uid || !ageMode) return;
+    const key = `${uid}|${ageMode}|${topicsKey}`;
+    if (loadedKeyRef.current === key) return; // already loaded this combo
+    loadedKeyRef.current = key;
     setLoading(true);
     try {
-      const topics = user?.selected_topics || [];
-      const res = await api.getSeedCards(topics, user?.age_mode);
-      // Shuffle for variety
+      const topics = topicsKey ? topicsKey.split(",") : [];
+      const res = await api.getSeedCards(topics, ageMode);
       const shuffled = [...res.cards].sort(() => Math.random() - 0.5);
       setCards(shuffled);
-      if (uid) {
-        const saved = await api.listSaved(uid);
-        setSavedIds(new Set(saved.cards.map((c) => c.card_id)));
-        // Bump streak on entry
-        bumpStreak().catch(() => {});
-      }
+      const saved = await api.listSaved(uid);
+      setSavedIds(new Set(saved.cards.map((c) => c.card_id)));
     } catch (e) {
       console.warn("feed load failed", e);
     } finally {
       setLoading(false);
     }
-  }, [user?.selected_topics, user?.age_mode, uid, bumpStreak]);
+  }, [uid, ageMode, topicsKey]);
 
+  // Load feed only when user identity / age / topics actually change
   useEffect(() => {
-    if (user) load();
-  }, [load, user]);
+    load();
+  }, [load]);
+
+  // Bump streak once per mount (not on every reload)
+  const streakBumpedRef = useRef(false);
+  useEffect(() => {
+    if (!uid || streakBumpedRef.current) return;
+    streakBumpedRef.current = true;
+    bumpStreak().catch(() => {});
+  }, [uid, bumpStreak]);
 
   const handleViewable = useCallback(
     ({ viewableItems }: any) => {

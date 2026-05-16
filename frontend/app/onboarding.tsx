@@ -151,7 +151,11 @@ export default function Onboarding() {
 
         {step === 3 && (
           <View style={styles.center} testID="onboarding-step-3">
-            <MascotAvatar mascot={mascot} size="xl" />
+            <MascotAvatar
+              mascot={mascot}
+              size="xl"
+              pose={mascot.id === "ausomeKoala" ? "armsUp" : "default"}
+            />
             <Text style={styles.h1}>Your plan is ready!</Text>
             <Text style={styles.sub}>{mascot.messages.greeting}</Text>
             <View style={styles.planRow}>

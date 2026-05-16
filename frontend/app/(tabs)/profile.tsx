@@ -39,7 +39,11 @@ export default function ProfileScreen() {
       <LinearGradient colors={[COLORS.cosmos, COLORS.nebula]} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         <View style={styles.header}>
-          <MascotAvatar mascot={mascot} size="xl" />
+          <MascotAvatar
+            mascot={mascot}
+            size="xl"
+            pose={mascot.id === "ausomeKoala" ? "single" : "default"}
+          />
           <Text style={styles.name}>{mascot.name}&apos;s Explorer</Text>
           <Text style={styles.levelBadge}>{levelName}</Text>
         </View>

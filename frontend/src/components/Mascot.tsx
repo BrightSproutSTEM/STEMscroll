@@ -1,9 +1,11 @@
 // Reusable mascot circular avatar with optional speech bubble.
+// Renders branded PNG when available; falls back to emoji.
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Mascot } from "@/src/mascots";
 import { COLORS } from "@/src/theme";
+import { getMascotImage } from "@/src/mascotImages";
 
 type Size = "sm" | "md" | "lg" | "xl";
 
@@ -13,13 +15,16 @@ const fontMap: Record<Size, number> = { sm: 24, md: 38, lg: 52, xl: 72 };
 export function MascotAvatar({
   mascot,
   size = "md",
+  pose = "default",
   testID,
 }: {
   mascot: Mascot;
   size?: Size;
+  pose?: string;
   testID?: string;
 }) {
   const px = sizeMap[size];
+  const imgSrc = getMascotImage(mascot.id, pose);
   return (
     <View
       testID={testID || `mascot-${mascot.id}`}
@@ -32,7 +37,16 @@ export function MascotAvatar({
         colors={[mascot.bgColor, "rgba(255,255,255,0.04)"]}
         style={[StyleSheet.absoluteFill, { borderRadius: px / 2 }]}
       />
-      <Text style={{ fontSize: fontMap[size] }}>{mascot.emoji}</Text>
+      {imgSrc ? (
+        <Image
+          source={imgSrc}
+          style={{ width: px * 0.94, height: px * 0.94 }}
+          resizeMode="contain"
+          accessibilityLabel={`${mascot.name} mascot`}
+        />
+      ) : (
+        <Text style={{ fontSize: fontMap[size] }}>{mascot.emoji}</Text>
+      )}
     </View>
   );
 }
@@ -41,16 +55,18 @@ export function MascotBubble({
   mascot,
   message,
   size = "md",
+  pose = "default",
   testID,
 }: {
   mascot: Mascot;
   message?: string;
   size?: Size;
+  pose?: string;
   testID?: string;
 }) {
   return (
     <View style={styles.bubbleRow} testID={testID || `mascot-bubble-${mascot.id}`}>
-      <MascotAvatar mascot={mascot} size={size} />
+      <MascotAvatar mascot={mascot} size={size} pose={pose} />
       {message ? (
         <View style={styles.bubble}>
           <Text style={styles.bubbleName}>{mascot.name}</Text>

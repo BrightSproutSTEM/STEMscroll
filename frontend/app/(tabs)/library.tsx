@@ -49,7 +49,12 @@ export default function LibraryScreen() {
         <ActivityIndicator color={COLORS.auroraTeal} style={{ marginTop: 40 }} />
       ) : items.length === 0 ? (
         <View style={styles.empty} testID="library-empty">
-          <MascotBubble mascot={mascot} message={mascot.messages.empty || "Save cards to revisit!"} size="lg" />
+          <MascotBubble
+            mascot={mascot}
+            message={mascot.messages.empty || "Save cards to revisit!"}
+            size="lg"
+            pose={mascot.id === "ausomeKoala" ? "armsUp" : "default"}
+          />
           <Text style={styles.emptyTitle}>No saves yet</Text>
           <Text style={styles.emptyHint}>Tap the ♥ on any card in the Feed to keep it here.</Text>
         </View>
