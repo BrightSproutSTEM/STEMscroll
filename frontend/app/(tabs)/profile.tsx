@@ -9,6 +9,7 @@ import { useUser } from "@/src/userContext";
 import { AGE_MODES, AgeMode, COLORS } from "@/src/theme";
 import { MASCOTS, getMascotForCard } from "@/src/mascots";
 import { MascotAvatar } from "@/src/components/Mascot";
+import { AnimatedMascot } from "@/src/components/AnimatedMascot";
 import { LEVEL_NAMES, api } from "@/src/api";
 import { storage } from "@/src/utils/storage";
 
@@ -39,10 +40,17 @@ export default function ProfileScreen() {
       <LinearGradient colors={[COLORS.cosmos, COLORS.nebula]} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         <View style={styles.header}>
-          <MascotAvatar
+          <AnimatedMascot
             mascot={mascot}
             size="xl"
-            pose={mascot.id === "ausomeKoala" ? "single" : "default"}
+            pose={
+              mascot.id === "ausomeKoala"
+                ? "single"
+                : mascot.id === "drSprout"
+                ? "meditating"
+                : "default"
+            }
+            variant={mascot.id === "drSprout" ? "float" : "subtle"}
           />
           <Text style={styles.name}>{mascot.name}&apos;s Explorer</Text>
           <Text style={styles.levelBadge}>{levelName}</Text>

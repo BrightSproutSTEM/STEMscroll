@@ -13,7 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { CardData } from "@/src/api";
 import { COLORS, SUBJECTS, AgeMode } from "@/src/theme";
 import { getMascotForCard } from "@/src/mascots";
-import { MascotAvatar, MascotBubble } from "@/src/components/Mascot";
+import { MascotAvatar } from "@/src/components/Mascot";
+import { AnimatedMascot } from "@/src/components/AnimatedMascot";
 
 interface Props {
   card: CardData;
@@ -131,6 +132,8 @@ function QuizBody({
 }) {
   const [picked, setPicked] = useState<number | null>(null);
   const correct = card.correctAnswer ?? 0;
+  const isCorrect = picked === correct;
+  const reactionPose = picked === null ? "default" : isCorrect ? "thumbsUp" : "surprise";
 
   return (
     <View>
@@ -167,14 +170,25 @@ function QuizBody({
           );
         })}
       </View>
-      {picked !== null && card.explanation ? (
-        <View style={styles.explainBox} testID="quiz-explanation">
-          <Text style={styles.explainLabel}>
-            {picked === correct ? mascot.messages.quizRight : mascot.messages.quizWrong}
-          </Text>
-          <Text style={styles.explainText}>{card.explanation}</Text>
+      {picked !== null && (
+        <View style={styles.reactRow}>
+          <AnimatedMascot
+            mascot={mascot}
+            pose={reactionPose}
+            size="md"
+            variant="celebrate"
+            testID="quiz-mascot-reaction"
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.reactLabel, { color: isCorrect ? COLORS.sproutGreen : COLORS.plasmaPink }]}>
+              {isCorrect ? mascot.messages.quizRight : mascot.messages.quizWrong}
+            </Text>
+            {card.explanation ? (
+              <Text style={styles.explainText} testID="quiz-explanation">{card.explanation}</Text>
+            ) : null}
+          </View>
         </View>
-      ) : null}
+      )}
     </View>
   );
 }
@@ -309,6 +323,15 @@ const styles = StyleSheet.create({
   },
   explainLabel: { color: COLORS.auroraTeal, fontWeight: "700", fontSize: 13, marginBottom: 6 },
   explainText: { color: COLORS.textPrimary, fontSize: 15, lineHeight: 21 },
+
+  reactRow: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    marginTop: 14,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    borderColor: COLORS.border, borderWidth: 1,
+    borderRadius: 16, padding: 12,
+  },
+  reactLabel: { fontWeight: "800", fontSize: 15, marginBottom: 4 },
 
   sectionLabel: { color: COLORS.auroraTeal, fontWeight: "800", fontSize: 13, marginTop: 14, marginBottom: 6, letterSpacing: 0.5 },
   bullet: { color: COLORS.stardust, fontSize: 15, lineHeight: 22 },

@@ -11,6 +11,8 @@ import * as Haptics from "expo-haptics";
 import { api, CardData, Mission } from "@/src/api";
 import { COLORS, SUBJECTS, AgeMode } from "@/src/theme";
 import { STEMCard } from "@/src/components/STEMCard";
+import { AnimatedMascot } from "@/src/components/AnimatedMascot";
+import { MASCOTS, MascotId } from "@/src/mascots";
 import { useUser } from "@/src/userContext";
 
 export default function MissionDetail() {
@@ -109,6 +111,13 @@ export default function MissionDetail() {
         )}
         ListFooterComponent={
           <View style={[styles.complete, { height: cardHeight }]}>
+            <AnimatedMascot
+              mascot={MASCOTS[(mission.mascot as MascotId) || "drSprout"] || MASCOTS.drSprout}
+              pose={mission.mascot === "drSprout" ? "victory" : "celebrate"}
+              size="xl"
+              variant="celebrate"
+              testID="mission-complete-mascot"
+            />
             <Text style={styles.completeEmoji}>🎉</Text>
             <Text style={styles.completeTitle}>Mission complete!</Text>
             <Text style={styles.completeDesc}>You powered through {mission.totalCards} cards.</Text>

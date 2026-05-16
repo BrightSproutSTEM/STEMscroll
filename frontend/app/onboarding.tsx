@@ -11,6 +11,7 @@ import { useUser } from "@/src/userContext";
 import { AGE_MODES, AgeMode, COLORS, SUBJECTS } from "@/src/theme";
 import { MASCOTS, getMascotForCard } from "@/src/mascots";
 import { MascotAvatar } from "@/src/components/Mascot";
+import { AnimatedMascot } from "@/src/components/AnimatedMascot";
 
 const TOPIC_KEYS = Object.keys(SUBJECTS);
 
@@ -151,10 +152,17 @@ export default function Onboarding() {
 
         {step === 3 && (
           <View style={styles.center} testID="onboarding-step-3">
-            <MascotAvatar
+            <AnimatedMascot
               mascot={mascot}
               size="xl"
-              pose={mascot.id === "ausomeKoala" ? "armsUp" : "default"}
+              pose={
+                mascot.id === "ausomeKoala"
+                  ? "armsUp"
+                  : mascot.id === "drSprout"
+                  ? "starJump"
+                  : "default"
+              }
+              variant="celebrate"
             />
             <Text style={styles.h1}>Your plan is ready!</Text>
             <Text style={styles.sub}>{mascot.messages.greeting}</Text>

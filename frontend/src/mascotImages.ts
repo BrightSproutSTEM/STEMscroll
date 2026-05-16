@@ -11,6 +11,15 @@ export const MASCOT_IMAGES: Record<string, Record<string, ImageSourcePropType>> 
     single: require("../assets/mascots/ausome-koala/koala-single.png"),
     celebrate: require("../assets/mascots/ausome-koala/koala-armsup.png"),
   },
+  drSprout: {
+    default: require("../assets/mascots/dr-sprout/thumbsup.png"),
+    victory: require("../assets/mascots/dr-sprout/victory.png"),
+    thumbsUp: require("../assets/mascots/dr-sprout/thumbsup.png"),
+    surprise: require("../assets/mascots/dr-sprout/surprise.png"),
+    starJump: require("../assets/mascots/dr-sprout/starjump.png"),
+    meditating: require("../assets/mascots/dr-sprout/meditating.png"),
+    celebrate: require("../assets/mascots/dr-sprout/victory.png"),
+  },
 };
 
 export function getMascotImage(mascotId: string, pose = "default"): ImageSourcePropType | null {
