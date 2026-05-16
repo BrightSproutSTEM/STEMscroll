@@ -1,0 +1,190 @@
+{
+  "theme": {
+    "name": "Dark Space Explorer",
+    "archetype": "7 (Electric & Neon) + 6 (Vibrant Play)",
+    "mode": "dark",
+    "description": "A dark, immersive cosmos theme combined with highly accessible, vibrant playfulness for children and neurodiverse users. Emphasizes focus through full-screen snap-scrolling."
+  },
+  "colors": {
+    "background": {
+      "primary": "#0B0F2E",
+      "secondary": "#1A1F4E",
+      "card": "#1A1F4E"
+    },
+    "brand": {
+      "cosmos": "#0B0F2E",
+      "nebula": "#1A1F4E",
+      "auroraTeal": "#00E5C3",
+      "solarOrange": "#FFB830",
+      "plasmaPink": "#FF5E7D",
+      "protonPurple": "#7B61FF",
+      "sproutGreen": "#4CAF50"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#B0B5D8",
+      "accent": "#00E5C3"
+    },
+    "subjects": {
+      "biology": { "color": "#FF5E7D", "gradient": ["#FF5E7D", "#1A1F4E"] },
+      "chemistry": { "color": "#4CAF50", "gradient": ["#4CAF50", "#1A1F4E"] },
+      "astronomy": { "color": "#FFB830", "gradient": ["#FFB830", "#1A1F4E"] },
+      "physics": { "color": "#7B61FF", "gradient": ["#7B61FF", "#1A1F4E"] },
+      "nature": { "color": "#4CAF50", "gradient": ["#4CAF50", "#1A1F4E"] },
+      "maths": { "color": "#7B61FF", "gradient": ["#7B61FF", "#1A1F4E"] },
+      "technology": { "color": "#00E5C3", "gradient": ["#00E5C3", "#1A1F4E"] },
+      "engineering": { "color": "#00E5C3", "gradient": ["#00E5C3", "#1A1F4E"] }
+    },
+    "utility": {
+      "success": "#4CAF50",
+      "error": "#FF5E7D",
+      "warning": "#FFB830",
+      "border": "rgba(255, 255, 255, 0.1)"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Syne, system-ui, -apple-system, sans-serif",
+      "body": "DM Sans, system-ui, -apple-system, sans-serif",
+      "monospace": "ui-monospace, SFMono-Regular, Menlo, monospace"
+    },
+    "scales": {
+      "h1": { "fontSize": "36px", "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" },
+      "h2": { "fontSize": "28px", "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "700" },
+      "h3": { "fontSize": "22px", "lineHeight": "28px", "fontWeight": "700" },
+      "body-lg": { "fontSize": "18px", "lineHeight": "26px", "fontWeight": "400" },
+      "body-md": { "fontSize": "16px", "lineHeight": "24px", "fontWeight": "400" },
+      "body-sm": { "fontSize": "14px", "lineHeight": "20px", "fontWeight": "500" },
+      "caption": { "fontSize": "12px", "lineHeight": "16px", "fontWeight": "600", "letterSpacing": "0.05em", "textTransform": "uppercase" }
+    }
+  },
+  "spacing": {
+    "container_padding": "24px",
+    "card_padding": "24px",
+    "feed_gap": "0px"
+  },
+  "layout": {
+    "feed": {
+      "pattern": "Vertical proximity snap-scroll",
+      "height": "100vh",
+      "width": "100%",
+      "maxWidth": "420px",
+      "description": "Each card occupies 100% height and width. The container snaps exactly to the card boundaries."
+    },
+    "navigation": {
+      "topBar": "Floating absolute at top with z-50. Glassmorphism backdrop-blur. Contains Streak counter and Age Mode toggle.",
+      "bottomTab": "Fixed at bottom. Solid Cosmos background #0B0F2E with safe area padding. Icons glow with active state."
+    }
+  },
+  "components": {
+    "feed_card": {
+      "description": "Full screen card with rounded-3xl inner container.",
+      "styles": {
+        "borderRadius": "24px",
+        "border": "1px solid rgba(255, 255, 255, 0.1)",
+        "boxShadow": "0 8px 32px rgba(0, 0, 0, 0.4)",
+        "overflow": "hidden"
+      },
+      "inner_layout": "Flex column, justified space-between. Top: Subject Label + Emoji, Middle: Mascot + Content, Bottom: Action Buttons (Save/Heart, Quiz options)."
+    },
+    "mascot_avatar": {
+      "description": "Emoji-based circular placeholder for mascots.",
+      "styles": {
+        "width": "64px",
+        "height": "64px",
+        "borderRadius": "32px",
+        "backgroundColor": "rgba(255, 255, 255, 0.1)",
+        "border": "2px solid #00E5C3",
+        "display": "flex",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "fontSize": "32px"
+      },
+      "mapping": {
+        "Sprouty": "🌱",
+        "Dr. Sprout": "🌳",
+        "Ausome Koala": "🐨",
+        "Quizzle": "❓",
+        "Wombles": "🐻",
+        "Zoomerroo": "🦘"
+      }
+    },
+    "quiz_button": {
+      "styles": {
+        "backgroundColor": "rgba(255, 255, 255, 0.05)",
+        "border": "1px solid rgba(255, 255, 255, 0.2)",
+        "borderRadius": "16px",
+        "padding": "16px",
+        "color": "#FFFFFF",
+        "fontWeight": "600",
+        "fontSize": "16px"
+      },
+      "states": {
+        "active": { "borderColor": "#7B61FF", "backgroundColor": "rgba(123, 97, 255, 0.2)" },
+        "correct": { "borderColor": "#4CAF50", "backgroundColor": "rgba(76, 175, 80, 0.2)", "color": "#4CAF50" },
+        "wrong": { "borderColor": "#FF5E7D", "backgroundColor": "rgba(255, 94, 125, 0.2)", "color": "#FF5E7D" }
+      }
+    },
+    "streak_counter": {
+      "styles": {
+        "display": "flex",
+        "alignItems": "center",
+        "gap": "8px",
+        "backgroundColor": "rgba(255, 184, 48, 0.15)",
+        "border": "1px solid #FFB830",
+        "borderRadius": "20px",
+        "padding": "6px 12px",
+        "color": "#FFB830",
+        "fontWeight": "700"
+      }
+    }
+  },
+  "accessibility": {
+    "neurodiversity_focus": [
+      "Avoid rapid flashing or high-frequency animations.",
+      "Provide large, readable text (DM Sans) with high contrast.",
+      "Keep layouts uncluttered: one central piece of information per card.",
+      "Use clear, predictable haptic feedback for correct/incorrect answers.",
+      "Ensure bottom tab icons have clear text labels underneath them."
+    ],
+    "contrast": "All text must pass WCAG AA over dark backgrounds. Avoid using grey-on-dark-grey.",
+    "motion": "Respect prefers-reduced-motion. Animations should be smooth, slow drifts, not fast zooms."
+  },
+  "interactions": {
+    "feed": "Vertical snap scrolling (1 screen at a time).",
+    "quiz": "Tap to select answer. Immediate color change (green/red) + haptic feedback + Mascot speech bubble update.",
+    "save": "Double tap card or tap Heart icon to save to Library. Plasma Pink fill animation.",
+    "streak": "Flame icon pulsates slightly when a streak is increased."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "category": "onboarding_hero",
+        "url": "https://static.prod-images.emergentagent.com/jobs/99ea964e-e02f-4721-9480-e5fb146afa6f/images/dfba79ada797e227070426a21424ac4132e4509dff480f59ead4bb1af17c76fc.png",
+        "description": "3D stylized cute rocket flying through colorful space nebula"
+      },
+      {
+        "category": "onboarding_astronaut",
+        "url": "https://static.prod-images.emergentagent.com/jobs/99ea964e-e02f-4721-9480-e5fb146afa6f/images/58c8776338b0c5e081a4fd89afd8d5febbff62ad01d17f72c4b121f828018c30.png",
+        "description": "3D cute astronaut floating with glowing books, atoms, and planets"
+      },
+      {
+        "category": "card_background_texture",
+        "url": "https://static.prod-images.emergentagent.com/jobs/99ea964e-e02f-4721-9480-e5fb146afa6f/images/8ccc9d4c5f916193df598b81e081faf49cb85e1912a8997734feb2ab7320a6de.png",
+        "description": "Mystical glowing deep space cosmos background for card textures (use with overlay blending)"
+      }
+    ]
+  },
+  "test_attributes": {
+    "mandatory": "All interactive elements MUST have a data-testid attribute.",
+    "examples": [
+      "data-testid='feed-container'",
+      "data-testid='card-fact'",
+      "data-testid='card-quiz-option-0'",
+      "data-testid='save-heart-btn'",
+      "data-testid='bottom-tab-library'",
+      "data-testid='streak-counter'",
+      "data-testid='age-mode-toggle'"
+    ]
+  }
+}
