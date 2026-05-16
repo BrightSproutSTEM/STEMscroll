@@ -20,6 +20,25 @@ export const MASCOT_IMAGES: Record<string, Record<string, ImageSourcePropType>> 
     meditating: require("../assets/mascots/dr-sprout/meditating.png"),
     celebrate: require("../assets/mascots/dr-sprout/victory.png"),
   },
+  quizzle: {
+    default: require("../assets/mascots/quizzle/default.png"),
+    celebrate: require("../assets/mascots/quizzle/default.png"),
+  },
+  wombles: {
+    default: require("../assets/mascots/wombles/default.png"),
+    celebrate: require("../assets/mascots/wombles/default.png"),
+  },
+  zoomerroo: {
+    default: require("../assets/mascots/zoomerroo/default.png"),
+    celebrate: require("../assets/mascots/zoomerroo/default.png"),
+  },
+  neuroSprouty: {
+    default: require("../assets/mascots/neuro-sprouty/aac.png"),
+    brainwave: require("../assets/mascots/neuro-sprouty/brainwave.png"),
+    aac: require("../assets/mascots/neuro-sprouty/aac.png"),
+    selfHug: require("../assets/mascots/neuro-sprouty/selfhug.png"),
+    celebrate: require("../assets/mascots/neuro-sprouty/brainwave.png"),
+  },
 };
 
 export function getMascotImage(mascotId: string, pose = "default"): ImageSourcePropType | null {

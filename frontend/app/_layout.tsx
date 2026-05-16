@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { UserProvider } from "@/src/userContext";
+import { LevelUpOverlay } from "@/src/components/LevelUpOverlay";
 
 export default function RootLayout() {
   return (
@@ -15,6 +16,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="mission/[id]" options={{ presentation: "modal" }} />
         </Stack>
+        <LevelUpOverlay />
       </UserProvider>
     </SafeAreaProvider>
   );
