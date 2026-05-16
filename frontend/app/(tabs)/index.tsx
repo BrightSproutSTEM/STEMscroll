@@ -11,6 +11,7 @@ import * as Haptics from "expo-haptics";
 import { useUser } from "@/src/userContext";
 import { api, CardData } from "@/src/api";
 import { STEMCard } from "@/src/components/STEMCard";
+import { SaveToast } from "@/src/components/SaveToast";
 import { AGE_MODES, AgeMode, COLORS } from "@/src/theme";
 
 export default function FeedScreen() {
@@ -21,6 +22,7 @@ export default function FeedScreen() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showModePicker, setShowModePicker] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
   const seenRef = useRef<Set<string>>(new Set());
 
   const cardHeight = useMemo(() => {
@@ -93,6 +95,7 @@ export default function FeedScreen() {
       } else {
         next.add(card.id);
         setSavedIds(next);
+        setShowSaveToast(true);
         api.saveCard(uid, card.id, card).catch(() => {});
       }
     },
@@ -191,6 +194,8 @@ export default function FeedScreen() {
           </View>
         )}
       </SafeAreaView>
+
+      <SaveToast visible={showSaveToast} onDone={() => setShowSaveToast(false)} />
     </View>
   );
 }

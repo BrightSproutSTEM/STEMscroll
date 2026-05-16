@@ -3,6 +3,14 @@
 import type { ImageSourcePropType } from "react-native";
 
 export const MASCOT_IMAGES: Record<string, Record<string, ImageSourcePropType>> = {
+  sprouty: {
+    default: require("../assets/mascots/sprouty/default.png"),
+    thumbsUp: require("../assets/mascots/sprouty/default.png"),
+    surprise: require("../assets/mascots/sprouty/surprise.png"),
+    thinking: require("../assets/mascots/sprouty/thinking.png"),
+    eureka: require("../assets/mascots/sprouty/thinking.png"),
+    celebrate: require("../assets/mascots/sprouty/default.png"),
+  },
   ausomeKoala: {
     default: require("../assets/mascots/ausome-koala/koala-default.png"),
     armsUp: require("../assets/mascots/ausome-koala/koala-armsup.png"),
@@ -33,10 +41,12 @@ export const MASCOT_IMAGES: Record<string, Record<string, ImageSourcePropType>> 
     celebrate: require("../assets/mascots/zoomerroo/default.png"),
   },
   neuroSprouty: {
-    default: require("../assets/mascots/neuro-sprouty/aac.png"),
+    default: require("../assets/mascots/neuro-sprouty/happy.png"),
+    happy: require("../assets/mascots/neuro-sprouty/happy.png"),
     brainwave: require("../assets/mascots/neuro-sprouty/brainwave.png"),
     aac: require("../assets/mascots/neuro-sprouty/aac.png"),
     selfHug: require("../assets/mascots/neuro-sprouty/selfhug.png"),
+    kisses: require("../assets/mascots/neuro-sprouty/kisses.png"),
     celebrate: require("../assets/mascots/neuro-sprouty/brainwave.png"),
   },
 };
