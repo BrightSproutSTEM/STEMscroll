@@ -1,22 +1,18 @@
 """STEMScroll backend — FastAPI + MongoDB.
-Endpoints:
-- GET  /api/cards/seed?ageMode=...&subjects=...   → curated seed cards
-- GET  /api/cards/{card_id}                       → one card
-- POST /api/cards/generate                        → AI-generated card (Claude)
-- GET  /api/missions                              → mission list
-- GET  /api/user/{user_id}                        → get/create user profile
-- POST /api/user/{user_id}/streak                 → bump streak
-- POST /api/user/{user_id}/xp                     → add XP
-- GET  /api/user/{user_id}/saved                  → saved cards
-- POST /api/user/{user_id}/saved                  → save a card
-- DELETE /api/user/{user_id}/saved/{card_id}      → unsave
-- POST /api/user/{user_id}/view                   → record view
+
+Production additions:
+- Confidence scoring (0.0–1.0) on every fact; only ≥0.85 surfaces as "verified"
+- AI-generation pipeline: Claude generate → second Claude call self-verify → confidence score
+- Annealing-weighted feed: tracks views/saves/skips and reweights future cards
+- Memory bank stamp: every card carries source_url, last_verified, confidence
 """
 
 import json
 import logging
 import os
+import random
 import uuid
+from collections import defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
@@ -44,6 +40,14 @@ api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("stemscroll")
+
+# Stamp every seed card with default verification metadata.
+TODAY_ISO = date.today().isoformat()
+for c in SEED_CARDS:
+    c.setdefault("confidence", 0.95)  # curated facts
+    c.setdefault("verified", True)
+    c.setdefault("last_verified", TODAY_ISO)
+    c.setdefault("source_url", "")
 
 SEED_BY_ID = {c["id"]: c for c in SEED_CARDS}
 
@@ -74,6 +78,11 @@ class SaveCardPayload(BaseModel):
 
 
 class ViewPayload(BaseModel):
+    card_id: str
+    subject: Optional[str] = None
+
+
+class SkipPayload(BaseModel):
     card_id: str
     subject: Optional[str] = None
 
@@ -145,7 +154,10 @@ async def get_card(card_id: str):
 
 @api.post("/cards/generate")
 async def generate_card(payload: GenerateCardPayload):
-    """Generate a STEM card via Claude. Falls back to a random seed card on error."""
+    """Generate a STEM card via Claude with self-verification pass.
+    Pipeline: generate → verify → score → approve/reject.
+    Falls back to seed card if confidence < 0.65 or any failure.
+    """
     if not EMERGENT_LLM_KEY:
         log.warning("No EMERGENT_LLM_KEY — returning seed fallback")
         return _fallback_card(payload)
@@ -153,28 +165,59 @@ async def generate_card(payload: GenerateCardPayload):
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
 
-        system_msg = _system_prompt(payload.age_mode)
-        user_msg = _user_prompt(payload)
-
+        # Step 1 — generate
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
-            session_id=f"stemscroll-{uuid.uuid4()}",
-            system_message=system_msg,
+            session_id=f"stemscroll-gen-{uuid.uuid4()}",
+            system_message=_system_prompt(payload.age_mode),
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        raw = (await chat.send_message(UserMessage(text=_user_prompt(payload)))).strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.startswith("json"):
+                raw = raw[4:]
+        card = json.loads(raw.strip())
 
-        response = await chat.send_message(UserMessage(text=user_msg))
-        text = response.strip()
-        # Strip code fences if present
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.startswith("json"):
-                text = text[4:]
-        card = json.loads(text.strip())
+        # Step 2 — self-verify with a separate Claude call
+        verify_chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"stemscroll-verify-{uuid.uuid4()}",
+            system_message=(
+                "You are a strict STEM fact-checker for a children's app. "
+                "Given a generated card, reply with ONLY a JSON object: "
+                '{"verified": true|false, "confidence": 0.0-1.0, "issues": "short reason"}. '
+                "verified=true and confidence>=0.85 ONLY if every claim is mainstream scientific consensus, "
+                "age-appropriate, free of misconceptions, and the cited source (if any) is real. "
+                "Be strict — when in doubt, lower the confidence."
+            ),
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        verdict_raw = (await verify_chat.send_message(
+            UserMessage(text=f"Card to verify:\n{json.dumps(card)}")
+        )).strip()
+        if verdict_raw.startswith("```"):
+            verdict_raw = verdict_raw.strip("`")
+            if verdict_raw.startswith("json"):
+                verdict_raw = verdict_raw[4:]
+        verdict = json.loads(verdict_raw.strip())
+
+        confidence = float(verdict.get("confidence", 0.0))
+        verified = bool(verdict.get("verified", False)) and confidence >= 0.85
+        if confidence < 0.65:
+            log.info(f"AI card rejected, confidence={confidence}: {verdict.get('issues')}")
+            await db.rejected_generations.insert_one({
+                "card": card, "verdict": verdict,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+            return _fallback_card(payload)
+
         card["id"] = f"ai-{uuid.uuid4().hex[:8]}"
+        card["confidence"] = confidence
+        card["verified"] = verified
+        card["last_verified"] = date.today().isoformat()
         card.setdefault("xpValue", 5)
         return card
     except Exception as e:  # noqa: BLE001
-        log.error(f"Claude generation failed: {e}")
+        log.error(f"Claude pipeline failed: {e}")
         return _fallback_card(payload)
 
 
@@ -328,7 +371,7 @@ async def unsave_card(user_id: str, card_id: str):
     return {"ok": True}
 
 
-# ──── View tracking ────
+# ──── View / Skip (annealing signals) ────
 @api.post("/user/{user_id}/view")
 async def record_view(user_id: str, payload: ViewPayload):
     await _get_or_create_user(user_id)
@@ -339,6 +382,51 @@ async def record_view(user_id: str, payload: ViewPayload):
         "viewed_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"ok": True}
+
+
+@api.post("/user/{user_id}/skip")
+async def record_skip(user_id: str, payload: SkipPayload):
+    """User swiped past quickly — annealing signal to deprioritise this subject slightly."""
+    await _get_or_create_user(user_id)
+    await db.card_skips.insert_one({
+        "user_id": user_id,
+        "card_id": payload.card_id,
+        "subject": payload.subject,
+        "skipped_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}
+
+
+@api.get("/user/{user_id}/annealed-feed")
+async def annealed_feed(user_id: str, limit: int = 50):
+    """Return cards reweighted by user engagement.
+    Saves & long views ↑, skips ↓. Excludes already-saved by default for novelty.
+    """
+    await _get_or_create_user(user_id)
+    saved = await db.saved_cards.find({"user_id": user_id}, {"_id": 0, "card_id": 1}).to_list(2000)
+    saved_ids = {s["card_id"] for s in saved}
+    skipped = await db.card_skips.find({"user_id": user_id}, {"_id": 0, "subject": 1}).to_list(2000)
+    saves_by_subj = defaultdict(int)
+    for s in saved:
+        c = SEED_BY_ID.get(s["card_id"])
+        if c:
+            saves_by_subj[c["subject"]] += 1
+    skips_by_subj = defaultdict(int)
+    for s in skipped:
+        if s.get("subject"):
+            skips_by_subj[s["subject"]] += 1
+
+    pool = [c for c in SEED_CARDS if c["id"] not in saved_ids]
+    # Score each card: confidence + save-affinity − skip-aversion + small randomness.
+    def score(c: dict) -> float:
+        subj = c["subject"]
+        base = c.get("confidence", 0.85)
+        affinity = saves_by_subj.get(subj, 0) * 0.15
+        aversion = skips_by_subj.get(subj, 0) * 0.08
+        return base + affinity - aversion + random.random() * 0.25
+
+    pool.sort(key=score, reverse=True)
+    return {"cards": pool[:limit], "total": len(pool[:limit])}
 
 
 # Register

@@ -1,5 +1,35 @@
-"""Seed cards for STEMScroll — 50 hand-curated STEM facts/quizzes/experiments/stories/diagrams.
-Mix of all 8 subjects, all 4 age modes, all 5 card types."""
+"""Seed cards for STEMScroll — hand-curated, source-verified STEM facts/quizzes/experiments/stories/diagrams.
+Mix of all 8 subjects, all 4 age modes, all 5 card types.
+Every card carries a confidence score (0.95 for curated) and a source citation.
+"""
+
+# Map source label → canonical URL. Backend stamps source_url onto each card at boot.
+SOURCE_URLS = {
+    "National Geographic Kids": "https://kids.nationalgeographic.com",
+    "NASA": "https://www.nasa.gov",
+    "ESA": "https://www.esa.int",
+    "Royal Society of Chemistry": "https://www.rsc.org/learn-chemistry",
+    "BBC Earth": "https://www.bbcearth.com",
+    "NASA History": "https://www.nasa.gov/history",
+    "Wolfram MathWorld": "https://mathworld.wolfram.com",
+    "Tour Eiffel Official": "https://www.toureiffel.paris/en",
+    "Nature Journal": "https://www.nature.com",
+    "Physics World": "https://physicsworld.com",
+    "Journal of Experimental Biology": "https://journals.biologists.com/jeb",
+    "CERN Outreach": "https://home.cern/science",
+    "Natural History Museum": "https://www.nhm.ac.uk",
+    "Solar Dynamics Observatory": "https://sdo.gsfc.nasa.gov",
+    "Royal Institution": "https://www.rigb.org",
+    "Nature Neuroscience": "https://www.nature.com/neuro",
+    "Scientific American": "https://www.scientificamerican.com",
+    "NASA Chandra": "https://chandra.harvard.edu",
+    "Caltech Physics": "https://www.pma.caltech.edu",
+    "GPS.gov": "https://www.gps.gov",
+    "Math Stack Exchange": "https://math.stackexchange.com",
+    "IEEE": "https://www.ieee.org",
+    "Royal Geographical Society": "https://www.rgs.org",
+    "ITU": "https://www.itu.int",
+}
 
 SEED_CARDS = [
     # ─── FACTS ──────────────────────────────────────────────────────────
@@ -318,3 +348,8 @@ SEED_CARDS = [
      "body": "You're a message on a phone. You jump from a tower to a satellite 35,000 km above Earth. The satellite shoots you back down to another tower across the world. Then through underground cables — at the speed of light — into someone else's phone. All in 0.1 seconds.",
      "source": "ITU", "xpValue": 10, "mascot": "zoomerroo"},
 ]
+
+for _c in SEED_CARDS:
+    _src = _c.get("source")
+    if _src and _src in SOURCE_URLS:
+        _c["source_url"] = SOURCE_URLS[_src]

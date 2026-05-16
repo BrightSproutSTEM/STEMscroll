@@ -14,16 +14,42 @@ import { STEMCard } from "@/src/components/STEMCard";
 import { SaveToast } from "@/src/components/SaveToast";
 import { AGE_MODES, AgeMode, COLORS } from "@/src/theme";
 
+// Tiny hook that pings the backend every 15s to decide live vs offline mode.
+function useOnlineStatus() {
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const ping = async () => {
+      try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 3000);
+        const r = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/api/`, { signal: ctl.signal });
+        clearTimeout(t);
+        if (alive) setOnline(r.ok);
+      } catch {
+        if (alive) setOnline(false);
+      }
+    };
+    ping();
+    const id = setInterval(ping, 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return online;
+}
+
 export default function FeedScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { user, uid, bumpStreak, addXP, setAgeMode } = useUser();
+  const online = useOnlineStatus();
   const [cards, setCards] = useState<CardData[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showModePicker, setShowModePicker] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const seenRef = useRef<Set<string>>(new Set());
+  const lastViewIdRef = useRef<string | null>(null);
+  const lastViewAtRef = useRef<number>(0);
 
   const cardHeight = useMemo(() => {
     // available height = window - top bar - bottom tab (~ 88/68)
@@ -39,14 +65,20 @@ export default function FeedScreen() {
   const load = useCallback(async () => {
     if (!uid || !ageMode) return;
     const key = `${uid}|${ageMode}|${topicsKey}`;
-    if (loadedKeyRef.current === key) return; // already loaded this combo
+    if (loadedKeyRef.current === key) return;
     loadedKeyRef.current = key;
     setLoading(true);
     try {
-      const topics = topicsKey ? topicsKey.split(",") : [];
-      const res = await api.getSeedCards(topics, ageMode);
-      const shuffled = [...res.cards].sort(() => Math.random() - 0.5);
-      setCards(shuffled);
+      // Try the annealed (personalised) feed first; fall back to topic-filtered seed.
+      let res: { cards: CardData[] };
+      try {
+        res = await api.annealedFeed(uid);
+        if (!res.cards.length) throw new Error("empty");
+      } catch {
+        const topics = topicsKey ? topicsKey.split(",") : [];
+        res = await api.getSeedCards(topics, ageMode);
+      }
+      setCards(res.cards);
       const saved = await api.listSaved(uid);
       setSavedIds(new Set(saved.cards.map((c) => c.card_id)));
     } catch (e) {
@@ -73,12 +105,24 @@ export default function FeedScreen() {
     ({ viewableItems }: any) => {
       const item = viewableItems[0]?.item as CardData | undefined;
       if (!item || !uid) return;
+      // Annealing signal: if previous card was visible <2s before swiping past, treat as "skip".
+      const now = Date.now();
+      const prevId = lastViewIdRef.current;
+      if (prevId && prevId !== item.id) {
+        const dwell = now - lastViewAtRef.current;
+        if (dwell < 2200) {
+          const prevCard = cards.find((c) => c.id === prevId);
+          api.recordSkip(uid, prevId, prevCard?.subject).catch(() => {});
+        }
+      }
+      lastViewIdRef.current = item.id;
+      lastViewAtRef.current = now;
       if (seenRef.current.has(item.id)) return;
       seenRef.current.add(item.id);
       api.recordView(uid, item.id, item.subject).catch(() => {});
       addXP(item.type === "fact" ? 5 : item.type === "story" ? 8 : 5).catch(() => {});
     },
-    [uid, addXP],
+    [uid, addXP, cards],
   );
 
   const toggleSave = useCallback(
@@ -118,7 +162,15 @@ export default function FeedScreen() {
     return (
       <View style={styles.loading}>
         <LinearGradient colors={[COLORS.cosmos, COLORS.nebula]} style={StyleSheet.absoluteFill} />
-        <ActivityIndicator color={COLORS.auroraTeal} size="large" />
+        <View style={styles.skeleton} testID="feed-skeleton">
+          <View style={styles.skBar} />
+          <View style={styles.skEmoji} />
+          <View style={[styles.skLine, { width: "80%" }]} />
+          <View style={[styles.skLine, { width: "60%" }]} />
+          <View style={[styles.skLine, { width: "92%", height: 14, marginTop: 16 }]} />
+          <View style={[styles.skLine, { width: "85%", height: 14 }]} />
+          <View style={[styles.skLine, { width: "72%", height: 14 }]} />
+        </View>
         <Text style={styles.loadingText}>Loading your STEM feed…</Text>
       </View>
     );
@@ -157,6 +209,30 @@ export default function FeedScreen() {
           <View style={styles.logo}>
             <Text style={{ fontSize: 22 }}>🌱</Text>
             <Text style={styles.logoText}>STEMScroll</Text>
+          </View>
+          <View
+            style={[
+              styles.connPill,
+              online
+                ? { backgroundColor: "rgba(76,175,80,0.18)", borderColor: COLORS.sproutGreen }
+                : { backgroundColor: "rgba(255,184,48,0.18)", borderColor: COLORS.solarOrange },
+            ]}
+            testID="connectivity-pill"
+          >
+            <View
+              style={[
+                styles.connDot,
+                { backgroundColor: online ? COLORS.sproutGreen : COLORS.solarOrange },
+              ]}
+            />
+            <Text
+              style={[
+                styles.connText,
+                { color: online ? COLORS.sproutGreen : COLORS.solarOrange },
+              ]}
+            >
+              {online ? "LIVE" : "OFFLINE"}
+            </Text>
           </View>
           <View style={styles.streak} testID="streak-counter">
             <Ionicons name="flame" size={16} color={COLORS.solarOrange} />
@@ -220,6 +296,26 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   streakText: { color: COLORS.solarOrange, fontWeight: "800", fontSize: 12 },
+  connPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12,
+  },
+  connDot: { width: 6, height: 6, borderRadius: 3 },
+  connText: { fontWeight: "900", fontSize: 10, letterSpacing: 0.8 },
+  skeleton: {
+    position: "absolute", top: 80, left: 20, right: 20,
+    backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 22,
+    padding: 22, borderWidth: 1, borderColor: COLORS.border,
+  },
+  skBar: { width: 90, height: 22, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.10)", marginBottom: 20 },
+  skEmoji: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.08)", alignSelf: "center", marginBottom: 16,
+  },
+  skLine: {
+    height: 22, borderRadius: 6, marginVertical: 6,
+    backgroundColor: "rgba(255,255,255,0.08)", alignSelf: "center",
+  },
   modeBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(0,229,195,0.15)",

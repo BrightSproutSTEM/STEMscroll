@@ -1,5 +1,5 @@
 // Full-screen STEM card component — renders all 5 card types.
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -7,9 +7,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Pressable,
+  Linking,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import * as Speech from "expo-speech";
 import { CardData } from "@/src/api";
 import { COLORS, SUBJECTS, AgeMode } from "@/src/theme";
 import { getMascotForCard } from "@/src/mascots";
@@ -29,6 +32,30 @@ interface Props {
 export function STEMCard({ card, ageMode, isSaved, isND, height, onSave, onQuizAnswer }: Props) {
   const subject = SUBJECTS[card.subject] || SUBJECTS.physics;
   const mascot = getMascotForCard(card, ageMode, isND);
+  const [speaking, setSpeaking] = useState(false);
+  const verified = card.verified !== false && (card.confidence ?? 0.95) >= 0.85;
+  const flagged = !verified && (card.confidence ?? 0) >= 0.65;
+
+  const toggleSpeak = async () => {
+    if (speaking) {
+      Speech.stop();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    const utter = `${card.headline}. ${card.body}${card.explanation ? `. ${card.explanation}` : ""}`;
+    Speech.speak(utter, {
+      rate: ageMode === "explorer" ? 0.85 : 0.95,
+      pitch: 1.05,
+      onDone: () => setSpeaking(false),
+      onStopped: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  };
+
+  const openSource = () => {
+    if (card.source_url) Linking.openURL(card.source_url).catch(() => {});
+  };
 
   return (
     <View style={[styles.root, { height }]} testID={`card-${card.id}`}>
@@ -39,7 +66,7 @@ export function STEMCard({ card, ageMode, isSaved, isND, height, onSave, onQuizA
         end={{ x: 1, y: 1 }}
       />
       <View style={styles.inner}>
-        {/* Top bar: subject tag */}
+        {/* Top bar: subject + verification status + TTS */}
         <View style={styles.topBar} testID={`card-subject-${card.subject}`}>
           <View style={[styles.subjectPill, { borderColor: subject.color }]}>
             <Text style={styles.subjectEmoji}>{subject.emoji}</Text>
@@ -47,9 +74,29 @@ export function STEMCard({ card, ageMode, isSaved, isND, height, onSave, onQuizA
               {subject.label.toUpperCase()}
             </Text>
           </View>
-          <View style={[styles.typePill, { borderColor: COLORS.border }]}>
-            <Text style={styles.typeText}>{cardTypeLabel(card.type)}</Text>
-          </View>
+          {verified ? (
+            <View style={styles.verifiedPill} testID="verified-badge">
+              <Ionicons name="shield-checkmark" size={12} color={COLORS.sproutGreen} />
+              <Text style={styles.verifiedText}>VERIFIED</Text>
+            </View>
+          ) : flagged ? (
+            <View style={styles.unverifiedPill} testID="unverified-badge">
+              <Ionicons name="warning" size={12} color={COLORS.solarOrange} />
+              <Text style={styles.unverifiedText}>CHECK WITH A GROWN-UP</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            onPress={toggleSpeak}
+            style={[styles.ttsBtn, speaking && { backgroundColor: COLORS.auroraTeal, borderColor: COLORS.auroraTeal }]}
+            testID="tts-btn"
+            accessibilityLabel="Read aloud"
+          >
+            <Ionicons
+              name={speaking ? "volume-high" : "volume-medium-outline"}
+              size={16}
+              color={speaking ? COLORS.cosmos : COLORS.textPrimary}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Body */}
@@ -70,7 +117,18 @@ export function STEMCard({ card, ageMode, isSaved, isND, height, onSave, onQuizA
           {card.type === "diagram" && <DiagramBody card={card} />}
 
           {card.source ? (
-            <Text style={styles.source}>Source: {card.source}</Text>
+            <TouchableOpacity
+              style={styles.sourcePill}
+              onPress={openSource}
+              disabled={!card.source_url}
+              testID="source-pill"
+            >
+              <Ionicons name="library-outline" size={13} color={COLORS.auroraTeal} />
+              <Text style={styles.sourceText}>Source: {card.source}</Text>
+              {card.source_url ? (
+                <Ionicons name="open-outline" size={13} color={COLORS.auroraTeal} />
+              ) : null}
+            </TouchableOpacity>
           ) : null}
 
           {/* Mascot footer */}
@@ -292,6 +350,34 @@ const styles = StyleSheet.create({
   body: { color: COLORS.stardust, fontSize: 17, lineHeight: 25, fontWeight: "400" },
   bodyLarge: { fontSize: 20, lineHeight: 28 },
   source: { color: COLORS.moonrock, fontSize: 11, marginTop: 16, fontStyle: "italic" },
+  sourcePill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 16, alignSelf: "flex-start",
+    backgroundColor: "rgba(0,229,195,0.10)",
+    borderColor: COLORS.auroraTeal, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12,
+  },
+  sourceText: { color: COLORS.auroraTeal, fontSize: 12, fontWeight: "700" },
+  verifiedPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10,
+    backgroundColor: "rgba(76,175,80,0.18)",
+    borderColor: COLORS.sproutGreen, borderWidth: 1,
+  },
+  verifiedText: { color: COLORS.sproutGreen, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  unverifiedPill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10,
+    backgroundColor: "rgba(255,184,48,0.18)",
+    borderColor: COLORS.solarOrange, borderWidth: 1,
+  },
+  unverifiedText: { color: COLORS.solarOrange, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  ttsBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1, borderColor: COLORS.border,
+  },
 
   quizOpt: {
     flexDirection: "row",

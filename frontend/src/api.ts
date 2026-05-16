@@ -39,6 +39,10 @@ export interface CardData {
   headline: string;
   body: string;
   source?: string;
+  source_url?: string;
+  confidence?: number;
+  verified?: boolean;
+  last_verified?: string;
   xpValue?: number;
   mascot?: string;
   quizOptions?: string[];
@@ -108,6 +112,10 @@ export const api = {
     req<{ ok: boolean }>(`/user/${uid}/saved/${card_id}`, { method: "DELETE" }),
   recordView: (uid: string, card_id: string, subject?: string) =>
     req<{ ok: boolean }>(`/user/${uid}/view`, { method: "POST", body: JSON.stringify({ card_id, subject }) }),
+  recordSkip: (uid: string, card_id: string, subject?: string) =>
+    req<{ ok: boolean }>(`/user/${uid}/skip`, { method: "POST", body: JSON.stringify({ card_id, subject }) }),
+  annealedFeed: (uid: string) =>
+    req<{ cards: CardData[]; total: number }>(`/user/${uid}/annealed-feed`),
 };
 
 export const LEVEL_NAMES = ["Curious Atom", "Molecule", "Cell", "Organism", "Ecosystem", "Universe"];
