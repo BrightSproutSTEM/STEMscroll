@@ -44,6 +44,17 @@ A vertical-scroll STEM knowledge "doom scroller" mobile app (Expo React Native) 
 | 5 | FastAPI deprecated `@app.on_event('shutdown')` → `lifespan` handler | `backend/server.py` |
 | 6 | Seed cards 46 → 50 (added f21, f22, q10, d6) | `backend/seed_cards.py` |
 
+## Web Preview (Emergent environment)
+The Emergent platform preview runs a **React web companion app** (not the Expo build).
+It faithfully replicates all screens and features with:
+- All 21 NeuroCrew mascot PNG images displayed (circular avatars with correct border colours)
+- 6 missions, 50 cards, all 5 card types
+- Per-subject gradient backgrounds (biology=dark green, chemistry=purple, astronomy=dark blue, etc.)
+- Aurora teal / Solar orange / Plasma pink colour scheme from original theme.ts
+- Full onboarding flow with mascot images at each step
+- Snap-scroll feed with VERIFIED badges, source pills, Save/XP/Swipe action bar
+- Profile shows "Meet the NeuroCrew" grid with all 7 mascot PNGs
+
 ## Tech
 - Frontend: Expo SDK 54, expo-router, expo-speech, expo-haptics, react-native-reanimated, expo-linear-gradient
 - Backend: FastAPI + Motor (MongoDB), `/api/*` endpoints, Claude Sonnet 4.5 via emergentintegrations

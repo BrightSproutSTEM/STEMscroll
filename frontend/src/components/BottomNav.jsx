@@ -11,37 +11,31 @@ const TABS = [
 
 export default function BottomNav({ active, onChange }) {
   return (
-    <nav style={styles.nav} data-testid="bottom-nav">
-      <div style={styles.inner}>
-        {TABS.map(tab => {
-          const isActive = active === tab.id;
-          return (
-            <button
-              key={tab.id}
-              data-testid={`nav-${tab.id}`}
-              onClick={() => onChange(tab.id)}
-              style={{ ...styles.tab, color: isActive ? COLORS.accent : COLORS.textSecondary }}
-            >
-              <span style={{ ...styles.icon, filter: isActive ? `drop-shadow(0 0 6px ${COLORS.accent})` : 'none' }}>
-                {tab.icon}
-              </span>
-              <span style={{ ...styles.label, color: isActive ? COLORS.accent : COLORS.textSecondary }}>
-                {tab.label}
-              </span>
-              {isActive && <div style={styles.dot} />}
-            </button>
-          );
-        })}
-      </div>
+    <nav style={S.nav} data-testid="bottom-nav">
+      {TABS.map(tab => {
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            data-testid={`nav-${tab.id}`}
+            onClick={() => onChange(tab.id)}
+            style={{ ...S.tab, color: isActive ? COLORS.auroraTeal : COLORS.moonrock }}
+          >
+            <span style={{ fontSize: 22, filter: isActive ? `drop-shadow(0 0 6px ${COLORS.auroraTeal})` : 'none', transition: 'filter 0.2s' }}>
+              {tab.icon}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 700, marginTop: 2, letterSpacing: 0.5, color: isActive ? COLORS.auroraTeal : COLORS.moonrock }}>
+              {tab.label}
+            </span>
+            {isActive && <div style={{ position: 'absolute', bottom: 6, width: 4, height: 4, borderRadius: 2, background: COLORS.auroraTeal }} />}
+          </button>
+        );
+      })}
     </nav>
   );
 }
 
-const styles = {
-  nav: { background: COLORS.bgCard, borderTop: `1px solid ${COLORS.border}`, flexShrink: 0, zIndex: 50 },
-  inner: { display: 'flex', paddingRight: 0 },
-  tab: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0 10px', background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', transition: 'color 0.2s', minHeight: 56, minWidth: 0 },
-  icon: { fontSize: 22, lineHeight: 1, transition: 'filter 0.2s' },
-  label: { fontSize: 10, fontWeight: 700, marginTop: 2, letterSpacing: 0.5, transition: 'color 0.2s' },
-  dot: { position: 'absolute', bottom: 6, width: 4, height: 4, borderRadius: 2, background: COLORS.accent },
+const S = {
+  nav: { display: 'flex', background: COLORS.nebula, borderTop: `1px solid ${COLORS.border}`, flexShrink: 0, zIndex: 50 },
+  tab: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0 10px', background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', transition: 'color 0.2s', minHeight: 56 },
 };

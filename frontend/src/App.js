@@ -22,7 +22,9 @@ function AppShell() {
   if (!ready) {
     return (
       <div style={splash.screen} data-testid="splash-screen">
-        <div style={splash.mascot}>🌱</div>
+        <div style={splash.mascot}>
+          <img src="/mascots/sprouty/thinking.png" alt="Sprouty" style={{ width: 100, height: 100, objectFit: 'contain' }} />
+        </div>
         <h1 style={splash.brand}>STEMScroll</h1>
         <p style={splash.tagline}>Every swipe makes you smarter</p>
         <div style={splash.spinner} />
@@ -63,10 +65,10 @@ export default function App() {
 
 const splash = {
   screen: { height: '100vh', background: '#0B0F2E', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  mascot: { fontSize: 80, filter: 'drop-shadow(0 0 30px rgba(123,97,255,0.5))' },
-  brand: { color: '#F0F4FF', fontSize: 36, fontWeight: 900, margin: 0, letterSpacing: 1 },
+  mascot: { filter: 'drop-shadow(0 0 30px rgba(0,229,195,0.4))' },
+  brand: { color: '#FFFFFF', fontSize: 36, fontWeight: 900, margin: 0, letterSpacing: 1 },
   tagline: { color: '#8892B0', fontSize: 16, margin: 0 },
-  spinner: { width: 32, height: 32, border: '3px solid #1E2545', borderTopColor: '#7B61FF', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginTop: 20 },
+  spinner: { width: 32, height: 32, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#7B61FF', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginTop: 20 },
 };
 
 const appStyles = {
