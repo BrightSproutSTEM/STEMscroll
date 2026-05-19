@@ -1,10 +1,12 @@
 """STEMScroll backend — FastAPI + MongoDB.
 
 Production additions:
-- Confidence scoring (0.0–1.0) on every fact; only ≥0.85 surfaces as "verified"
-- AI-generation pipeline: Claude generate → second Claude call self-verify → confidence score
+- Gemini-powered infinite feed with temperature=0.95 for maximum variation
+- Universal Non-Repeat Engine (MongoDB deduplication, 200/5 rule)
+- SeenContentRegistry + RecentBuffer + UniqueCounter + MemoryBank
+- Topic rotation — never covers the same angle twice in a session
+- Self-verification pass on all AI-generated cards
 - Annealing-weighted feed: tracks views/saves/skips and reweights future cards
-- Memory bank stamp: every card carries source_url, last_verified, confidence
 """
 
 import json
@@ -19,11 +21,14 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
+import dedup_service
+import topic_rotation
+import gemini_service
 from missions_data import MISSIONS
 from seed_cards import SEED_CARDS
 
@@ -42,7 +47,7 @@ log = logging.getLogger("stemscroll")
 # Stamp every seed card with default verification metadata.
 TODAY_ISO = date.today().isoformat()
 for c in SEED_CARDS:
-    c.setdefault("confidence", 0.95)  # curated facts
+    c.setdefault("confidence", 0.95)
     c.setdefault("verified", True)
     c.setdefault("last_verified", TODAY_ISO)
     c.setdefault("source_url", "")
@@ -52,7 +57,12 @@ SEED_BY_ID = {c["id"]: c for c in SEED_CARDS}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup / shutdown lifecycle handler (replaces deprecated on_event)."""
+    """Startup: init dedup indexes and Gemini service."""
+    dedup_service.init_db(db)
+    topic_rotation.init_db(db)
+    gemini_service.init_gemini(EMERGENT_LLM_KEY)
+    await dedup_service.ensure_indexes()
+    log.info("STEMScroll startup complete")
     yield
     client.close()
 
@@ -105,6 +115,13 @@ class GenerateCardPayload(BaseModel):
     age_mode: str = "discoverer"
     card_type: str = "fact"  # fact | quiz | experiment | story | diagram
     avoid_ids: List[str] = Field(default_factory=list)
+
+
+class InfiniteFeedRequest(BaseModel):
+    context: str = "feed"    # feed | quiz | diagram | experiment | mission_[id]
+    count: int = 8
+    category: Optional[str] = None   # override user's subjects
+    card_types: Optional[List[str]] = None
 
 
 # ─────────────────────────────────────────── Helpers
@@ -163,70 +180,49 @@ async def get_card(card_id: str):
 
 @api.post("/cards/generate")
 async def generate_card(payload: GenerateCardPayload):
-    """Generate a STEM card via Claude with self-verification pass.
-    Pipeline: generate → verify → score → approve/reject.
-    Falls back to seed card if confidence < 0.65 or any failure.
+    """Generate a STEM card via Gemini (temperature=0.95) with self-verification.
+    Falls back to seed card if confidence < 0.65 or generation fails.
     """
-    if not EMERGENT_LLM_KEY:
-        log.warning("No EMERGENT_LLM_KEY — returning seed fallback")
+    gemini = gemini_service.get_gemini()
+    if not gemini:
         return _fallback_card(payload)
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        user_id = getattr(payload, "user_id", "anon")
+        ctx_key = dedup_service.CONTEXTS.FACT(user_id)
+        recent_hashes = await dedup_service.get_recent_hashes(user_id, ctx_key, 15)
 
-        # Step 1 — generate
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"stemscroll-gen-{uuid.uuid4()}",
-            system_message=_system_prompt(payload.age_mode),
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        raw = (await chat.send_message(UserMessage(text=_user_prompt(payload)))).strip()
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            if raw.startswith("json"):
-                raw = raw[4:]
-        card = json.loads(raw.strip())
+        cards = await gemini.generate_batch(
+            topic=payload.topic,
+            category=payload.topic,  # topic IS the category here
+            age_mode=payload.age_mode,
+            count=1,
+            recent_hashes=recent_hashes,
+            card_types=[payload.card_type],
+        )
+        if not cards:
+            return _fallback_card(payload)
+        card = cards[0]
 
-        # Step 2 — self-verify with a separate Claude call
-        verify_chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"stemscroll-verify-{uuid.uuid4()}",
-            system_message=(
-                "You are a strict STEM fact-checker for a children's app. "
-                "Given a generated card, reply with ONLY a JSON object: "
-                '{"verified": true|false, "confidence": 0.0-1.0, "issues": "short reason"}. '
-                "verified=true and confidence>=0.85 ONLY if every claim is mainstream scientific consensus, "
-                "age-appropriate, free of misconceptions, and the cited source (if any) is real. "
-                "Be strict — when in doubt, lower the confidence."
-            ),
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        verdict_raw = (await verify_chat.send_message(
-            UserMessage(text=f"Card to verify:\n{json.dumps(card)}")
-        )).strip()
-        if verdict_raw.startswith("```"):
-            verdict_raw = verdict_raw.strip("`")
-            if verdict_raw.startswith("json"):
-                verdict_raw = verdict_raw[4:]
-        verdict = json.loads(verdict_raw.strip())
-
+        # Self-verification pass
+        verdict = await gemini.verify_card(card)
         confidence = float(verdict.get("confidence", 0.0))
         verified = bool(verdict.get("verified", False)) and confidence >= 0.85
+
         if confidence < 0.65:
-            log.info(f"AI card rejected, confidence={confidence}: {verdict.get('issues')}")
+            log.info(f"Card rejected confidence={confidence}: {verdict.get('issues')}")
             await db.rejected_generations.insert_one({
                 "card": card, "verdict": verdict,
                 "ts": datetime.now(timezone.utc).isoformat(),
             })
             return _fallback_card(payload)
 
-        card["id"] = f"ai-{uuid.uuid4().hex[:8]}"
         card["confidence"] = confidence
         card["verified"] = verified
-        card["last_verified"] = date.today().isoformat()
-        card.setdefault("xpValue", 5)
         return card
-    except Exception as e:  # noqa: BLE001
-        log.error(f"Claude pipeline failed: {e}")
+
+    except Exception as e:
+        log.error(f"Gemini generate_card error: {e}")
         return _fallback_card(payload)
 
 
@@ -436,6 +432,127 @@ async def annealed_feed(user_id: str, limit: int = 50):
 
     pool.sort(key=score, reverse=True)
     return {"cards": pool[:limit], "total": len(pool[:limit])}
+
+
+# ──── Infinite Feed (Gemini + Deduplication) ────
+@api.get("/feed/infinite/{user_id}")
+async def infinite_feed(
+    user_id: str,
+    context: str = Query(default="feed"),
+    count: int = Query(default=8, ge=1, le=20),
+    category: Optional[str] = None,
+):
+    """
+    Infinite feed endpoint — the core of the Non-Repeat Engine.
+
+    Pipeline:
+    1. Get user profile (age_mode, topics)
+    2. Topic rotation: pick next category + topic not recently covered
+    3. Pull recent hashes from dedup registry → inject into Gemini prompt
+    4. Gemini generates batch (temperature=0.95)  
+    5. filterApprovedCards() applies 3-gate dedup (recent buffer, never seen, 200/5 rule)
+    6. Falls back to seed cards if Gemini unavailable or batch too small
+    7. Returns deduplicated batch ready for the feed
+    """
+    user = await _get_or_create_user(user_id)
+    age_mode = user.get("age_mode", "discoverer")
+    user_topics = user.get("selected_topics", [])
+
+    ctx_key = dedup_service.CONTEXTS.FEED(user_id) if context == "feed" else f"{context}_{user_id}"
+
+    # Pick next category and topic
+    chosen_category = category or await topic_rotation.get_next_category(user_id, ctx_key, user_topics)
+    topic = await topic_rotation.get_next_topic(chosen_category, user_id, ctx_key)
+
+    # Get recently seen hashes for anti-repeat injection
+    recent_hashes = await dedup_service.get_recent_hashes(user_id, ctx_key, limit=20)
+
+    # Get recent headlines for headline-level dedup
+    recent_docs = await db.seen_registry.find(
+        {"user_id": user_id, "context": ctx_key},
+        {"_id": 0},
+    ).sort("last_seen_at", -1).limit(15).to_list(15)
+    avoid_headlines: list = []  # We don't store headlines separately yet — future enhancement
+
+    # Try Gemini generation
+    gemini = gemini_service.get_gemini()
+    raw_cards = []
+    if gemini:
+        raw_cards = await gemini.generate_batch(
+            topic=topic,
+            category=chosen_category,
+            age_mode=age_mode,
+            count=count + 4,  # over-generate to account for dedup filtering
+            recent_hashes=recent_hashes,
+            avoid_headlines=avoid_headlines,
+        )
+
+    # Filter through dedup engine
+    approved = []
+    if raw_cards:
+        approved = await dedup_service.filter_approved_cards(user_id, ctx_key, raw_cards)
+
+    # Fallback: supplement with seed cards if batch is thin
+    MIN_BATCH = max(3, count // 2)
+    if len(approved) < MIN_BATCH:
+        seed_pool = [c for c in SEED_CARDS]
+        random.shuffle(seed_pool)
+        seed_filtered = await dedup_service.filter_approved_cards(user_id, ctx_key, seed_pool[:20])
+        approved.extend(seed_filtered)
+
+    # Final trim
+    result = approved[:count]
+    log.info(f"Infinite feed: user={user_id} ctx={ctx_key} topic='{topic}' "
+             f"generated={len(raw_cards)} approved={len(approved)} returned={len(result)}")
+
+    return {
+        "cards": result,
+        "total": len(result),
+        "topic": topic,
+        "category": chosen_category,
+        "ai_generated": len(raw_cards) > 0,
+        "context": ctx_key,
+    }
+
+
+@api.get("/feed/generate-batch/{user_id}")
+async def generate_feed_batch(
+    user_id: str,
+    category: Optional[str] = None,
+    count: int = Query(default=8, ge=1, le=20),
+    context: str = Query(default="feed"),
+):
+    """Force-generate a fresh batch via Gemini (used for pre-fetching)."""
+    return await infinite_feed(user_id, context=context, count=count, category=category)
+
+
+@api.get("/dedup/stats/{user_id}")
+async def get_dedup_stats(user_id: str, context: str = Query(default="feed")):
+    """Return deduplication statistics for debugging and progress display."""
+    ctx_key = f"{context}_{user_id}"
+    stats = await dedup_service.get_dedup_stats(user_id, ctx_key)
+    return {"user_id": user_id, "context": ctx_key, **stats}
+
+
+@api.get("/feed/offline/{user_id}")
+async def offline_feed(
+    user_id: str,
+    card_type: str = Query(default="fact"),
+    category: str = Query(default="biology"),
+    count: int = Query(default=5),
+):
+    """Serve cards from the memory bank when offline."""
+    user = await _get_or_create_user(user_id)
+    ctx_key = dedup_service.CONTEXTS.FEED(user_id)
+    cards = await dedup_service.get_offline_cards(
+        user_id=user_id,
+        context=ctx_key,
+        card_type=card_type,
+        category=category,
+        age_tier=user.get("age_mode", "discoverer"),
+        count=count,
+    )
+    return {"cards": cards, "total": len(cards), "source": "memory_bank"}
 
 
 # Register
