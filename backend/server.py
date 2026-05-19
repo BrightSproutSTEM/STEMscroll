@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, FastAPI, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
@@ -435,9 +435,42 @@ async def annealed_feed(user_id: str, limit: int = 50):
 
 
 # ──── Infinite Feed (Gemini + Deduplication) ────
+async def _generate_and_bank(
+    user_id: str,
+    ctx_key: str,
+    chosen_category: str,
+    topic: str,
+    age_mode: str,
+    count: int,
+):
+    """Background job: call Gemini and let dedup filter+bank the results.
+    Runs after the HTTP response is sent so the ingress timeout doesn't fire.
+    """
+    gemini = gemini_service.get_gemini()
+    if not gemini:
+        return
+    try:
+        recent_hashes = await dedup_service.get_recent_hashes(user_id, ctx_key, limit=20)
+        raw_cards = await gemini.generate_batch(
+            topic=topic,
+            category=chosen_category,
+            age_mode=age_mode,
+            count=count + 4,
+            recent_hashes=recent_hashes,
+            avoid_headlines=[],
+        )
+        if raw_cards:
+            # filter_approved_cards also banks every accepted card into MemoryBank.
+            approved = await dedup_service.filter_approved_cards(user_id, ctx_key, raw_cards)
+            log.info(f"BG gen banked {len(approved)} cards for {user_id} topic='{topic}'")
+    except Exception as e:
+        log.error(f"BG gen error for {user_id}: {e}")
+
+
 @api.get("/feed/infinite/{user_id}")
 async def infinite_feed(
     user_id: str,
+    background_tasks: BackgroundTasks,
     context: str = Query(default="feed"),
     count: int = Query(default=8, ge=1, le=20),
     category: Optional[str] = None,
@@ -445,14 +478,12 @@ async def infinite_feed(
     """
     Infinite feed endpoint — the core of the Non-Repeat Engine.
 
-    Pipeline:
-    1. Get user profile (age_mode, topics)
-    2. Topic rotation: pick next category + topic not recently covered
-    3. Pull recent hashes from dedup registry → inject into Gemini prompt
-    4. Gemini generates batch (temperature=0.95)  
-    5. filterApprovedCards() applies 3-gate dedup (recent buffer, never seen, 200/5 rule)
-    6. Falls back to seed cards if Gemini unavailable or batch too small
-    7. Returns deduplicated batch ready for the feed
+    Pipeline (non-blocking — must respond before ingress timeout):
+    1. Look up next topic + category to cover (rotation, no repeats).
+    2. Serve unseen cards from MemoryBank (filtered through the 3-gate dedup).
+    3. Top-up with seed cards if bank is thin.
+    4. Schedule a Gemini generation in the background that will populate
+       the MemoryBank for the next request.
     """
     user = await _get_or_create_user(user_id)
     age_mode = user.get("age_mode", "discoverer")
@@ -460,57 +491,47 @@ async def infinite_feed(
 
     ctx_key = dedup_service.CONTEXTS.FEED(user_id) if context == "feed" else f"{context}_{user_id}"
 
-    # Pick next category and topic
+    # Pick next category and topic for this round.
     chosen_category = category or await topic_rotation.get_next_category(user_id, ctx_key, user_topics)
     topic = await topic_rotation.get_next_topic(chosen_category, user_id, ctx_key)
 
-    # Get recently seen hashes for anti-repeat injection
-    recent_hashes = await dedup_service.get_recent_hashes(user_id, ctx_key, limit=20)
+    # Build the response NOW using already-banked content + seeds.
+    pref_cats = [chosen_category] + (user_topics or [])
+    approved = await dedup_service.serve_from_bank(user_id, ctx_key, count, categories=pref_cats)
+    ai_served = len(approved)
 
-    # Get recent headlines for headline-level dedup
-    recent_docs = await db.seen_registry.find(
-        {"user_id": user_id, "context": ctx_key},
-        {"_id": 0},
-    ).sort("last_seen_at", -1).limit(15).to_list(15)
-    avoid_headlines: list = []  # We don't store headlines separately yet — future enhancement
+    if len(approved) < count:
+        # Try the bank again with no category restriction.
+        more = await dedup_service.serve_from_bank(user_id, ctx_key, count - len(approved))
+        approved.extend(more)
 
-    # Try Gemini generation
-    gemini = gemini_service.get_gemini()
-    raw_cards = []
-    if gemini:
-        raw_cards = await gemini.generate_batch(
-            topic=topic,
-            category=chosen_category,
-            age_mode=age_mode,
-            count=count + 4,  # over-generate to account for dedup filtering
-            recent_hashes=recent_hashes,
-            avoid_headlines=avoid_headlines,
-        )
-
-    # Filter through dedup engine
-    approved = []
-    if raw_cards:
-        approved = await dedup_service.filter_approved_cards(user_id, ctx_key, raw_cards)
-
-    # Fallback: supplement with seed cards if batch is thin
-    MIN_BATCH = max(3, count // 2)
-    if len(approved) < MIN_BATCH:
+    if len(approved) < count:
+        # Final fallback: seed cards through the dedup filter.
         seed_pool = [c for c in SEED_CARDS]
         random.shuffle(seed_pool)
-        seed_filtered = await dedup_service.filter_approved_cards(user_id, ctx_key, seed_pool[:20])
+        seed_filtered = await dedup_service.filter_approved_cards(user_id, ctx_key, seed_pool[:30])
         approved.extend(seed_filtered)
 
-    # Final trim
     result = approved[:count]
-    log.info(f"Infinite feed: user={user_id} ctx={ctx_key} topic='{topic}' "
-             f"generated={len(raw_cards)} approved={len(approved)} returned={len(result)}")
+
+    # Schedule Gemini generation in the background — populates bank for next call.
+    background_tasks.add_task(
+        _generate_and_bank,
+        user_id, ctx_key, chosen_category, topic, age_mode, count,
+    )
+
+    log.info(
+        f"Infinite feed: user={user_id} ctx={ctx_key} topic='{topic}' "
+        f"from_bank={ai_served} total_returned={len(result)} bg_gen=scheduled"
+    )
 
     return {
         "cards": result,
         "total": len(result),
         "topic": topic,
         "category": chosen_category,
-        "ai_generated": len(raw_cards) > 0,
+        "ai_generated": ai_served > 0,
+        "from_bank": ai_served,
         "context": ctx_key,
     }
 
@@ -518,12 +539,13 @@ async def infinite_feed(
 @api.get("/feed/generate-batch/{user_id}")
 async def generate_feed_batch(
     user_id: str,
+    background_tasks: BackgroundTasks,
     category: Optional[str] = None,
     count: int = Query(default=8, ge=1, le=20),
     context: str = Query(default="feed"),
 ):
     """Force-generate a fresh batch via Gemini (used for pre-fetching)."""
-    return await infinite_feed(user_id, context=context, count=count, category=category)
+    return await infinite_feed(user_id, background_tasks, context=context, count=count, category=category)
 
 
 @api.get("/dedup/stats/{user_id}")

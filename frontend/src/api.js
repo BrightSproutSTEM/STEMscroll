@@ -30,4 +30,9 @@ export const api = {
   generateCard: (uid, subjectFilter, ageMode) =>
     req('POST', '/cards/generate', { user_id: uid, subject_filter: subjectFilter, age_mode: ageMode }),
   getAnnealedFeed: (uid)             => req('GET', `/user/${uid}/annealed-feed`).then(d => d.cards || d),
+  getInfiniteFeed: (uid, count = 8, context = 'feed') =>
+    req('GET', `/feed/infinite/${uid}?context=${encodeURIComponent(context)}&count=${count}`)
+      .then(d => ({ cards: d.cards || [], topic: d.topic, category: d.category, aiGenerated: d.ai_generated })),
+  getDedupStats: (uid, context = 'feed') =>
+    req('GET', `/dedup/stats/${uid}?context=${encodeURIComponent(context)}`),
 };

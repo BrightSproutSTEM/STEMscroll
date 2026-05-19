@@ -1,70 +1,59 @@
 # STEMScroll — Product Requirements
 
 ## What it is
-A vertical-scroll STEM knowledge "doom scroller" mobile app (Expo React Native) for ages 3–15, homeschool parents, and neurodiverse families. Like TikTok but every card makes you smarter.
+A vertical-scroll STEM knowledge "doom scroller" for ages 3–15, homeschool parents, and neurodiverse families. Web preview + Expo mobile.
 
-## Core MVP features (shipped)
-- **Onboarding** (4 steps): welcome + neurodiverse toggle → age mode → topic picker → growth plan
-- **Feed**: vertical FlatList with `snapToInterval` paging through STEM cards. 5 card types: Fact, Quiz, Experiment, Story, Diagram
-- **NeuroCrew Mascots**: 7 branded characters with real PNG art + 4 motion variants (Sprouty, Dr. Sprout, Ausome Koala, Quizzle, Wombles, Zoomerroo, Neuro Sprouty)
-- **Streak system + XP/Levels** (Curious Atom → Universe, 6 tiers) with global Level-Up celebration
-- **SaveToast** with Neuro Sprouty blowing kisses
-- **Library / Missions / Explore / Profile** tabs
-- **AI Card Generation** (Claude Sonnet 4.5)
+## Section A — Infinite Feed Generation (NEW, shipped Feb 2026)
+**The Universal Non-Repeat Engine** — the same fact never shows up twice for 200+ unique cards, then at most 5 times max.
 
-## Production-grade enhancements (shipped)
-### Hallucination prevention pipeline (3-layer)
-- Every seed card carries `confidence` (0.0–1.0), `verified` boolean, `last_verified`, `source_url`
-- AI generation runs a **two-step Claude pipeline**: generate → second Claude self-verifies → score; if confidence <0.65, the card is rejected and logged to `rejected_generations`; <0.85 surfaces as "CHECK WITH A GROWN-UP" instead of "VERIFIED"
-- Visible **VERIFIED** (green shield) and **unverified** (orange warning) badges on every card
+### Architecture
+- `GET /api/feed/infinite/{user_id}` — non-blocking endpoint, responds <500ms
+- Serves unseen cards from `MemoryBank` (filtered by 3-gate dedup)
+- Tops up with seed cards if bank is thin
+- Schedules a `BackgroundTasks` Gemini generation that hydrates the bank for the next request
+- Result: ingress timeouts (30s) are bypassed; Gemini's 20–30s cold latency is hidden from the user
 
-### Source citations
-- Every fact has a tappable **Source: …** pill with external-link icon (opens canonical URL — Nat Geo Kids, NASA, BBC Earth, Royal Society of Chemistry, etc.)
+### Dedup engine (MongoDB collections)
+- **SeenContentRegistry** — permanent per-user-per-context card history (200/5 rule)
+- **RecentBuffer** — rolling last-10 shown per context (immediate block)
+- **UniqueCounter** — tracks unique count per category+type
+- **MemoryBank** — every approved AI card stored for offline + low-latency serving
+- Universal `content_hash` (SHA-256 over content-defining fields per card type)
 
-### Annealing / self-learning
-- View dwell-time → if user swiped past in <2.2s, backend records a **skip** signal
-- New `/api/user/{uid}/annealed-feed` endpoint scores cards by `confidence + saves_by_subject*0.15 − skips_by_subject*0.08 + small randomness`
-- Saved cards excluded from feed (novelty bias)
+### Gemini integration
+- `emergentintegrations.llm.chat.LlmChat` → `gemini-2.5-flash`, `temperature=0.95`
+- System prompt enforces JSON schema, age rule, mascot, diversity
+- User prompt injects up to 20 recent hashes + banned headlines as anti-repeat signal
+- Background generation pre-warms MemoryBank so subsequent fetches are instant
 
-### Connectivity intelligence
-- Frontend polls `/api/` every 15s — top bar shows green **LIVE** pill or amber **OFFLINE** pill
+### Frontend infinite scroll (`Feed.jsx`)
+- Initial render: seed cards in <500ms (no waiting)
+- Background fetches `/api/feed/infinite/{uid}` and appends AI cards
+- IntersectionObserver on the last card triggers next batch when user is within 3 cards of the end
+- Topic pill shows what's currently streaming (`✨ Streaming · physics · wave-particle duality`)
+- Client-side `seenIds` Set prevents re-rendering the same card
 
-### Accessibility
-- **Read-aloud TTS** button on every card (expo-speech, slower rate for Explorer mode)
-- Skeleton loader matches card shape during fetch
-- WCAG-friendly contrast, 44pt+ touch targets, `accessibilityLabel`s
-
-## Bug fixes (latest iteration)
-| # | Fix | File |
-|---|-----|------|
-| 1 | `app.json` splash-icon.png → splash-image.png (EAS build crash fix) | `frontend/app.json` |
-| 2 | App name/slug/scheme "frontend" → "STEMScroll"/"stemscroll" | `frontend/app.json` |
-| 3 | Card f16 emoji `⚫` (invisible on dark bg) → `🎵` | `backend/seed_cards.py` |
-| 4 | Ionicons font loading: explicit preload via `useFonts` + `SplashScreen` | `frontend/app/_layout.tsx` |
-| 5 | FastAPI deprecated `@app.on_event('shutdown')` → `lifespan` handler | `backend/server.py` |
-| 6 | Seed cards 46 → 50 (added f21, f22, q10, d6) | `backend/seed_cards.py` |
-
-## Web Preview (Emergent environment)
-The Emergent platform preview runs a **React web companion app** (not the Expo build).
-It faithfully replicates all screens and features with:
-- All 21 NeuroCrew mascot PNG images displayed (circular avatars with correct border colours)
-- 6 missions, 50 cards, all 5 card types
-- Per-subject gradient backgrounds (biology=dark green, chemistry=purple, astronomy=dark blue, etc.)
-- Aurora teal / Solar orange / Plasma pink colour scheme from original theme.ts
-- Full onboarding flow with mascot images at each step
-- Snap-scroll feed with VERIFIED badges, source pills, Save/XP/Swipe action bar
-- Profile shows "Meet the NeuroCrew" grid with all 7 mascot PNGs
+## Existing MVP features (still shipped)
+- Onboarding (4 steps), age modes, neurodiverse toggle
+- Annealing (`saves×0.15 − skips×0.08`), confidence pipeline, source citations
+- NeuroCrew Mascots (7 PNGs + 4 motion variants)
+- Streak / XP / Levels, Save toast, Library/Missions/Explore/Profile tabs
 
 ## Tech
-- Frontend: Expo SDK 54, expo-router, expo-speech, expo-haptics, react-native-reanimated, expo-linear-gradient
-- Backend: FastAPI + Motor (MongoDB), `/api/*` endpoints, Claude Sonnet 4.5 via emergentintegrations
-- Confidence pipeline: Claude generate → Claude verify → score → store in `rejected_generations` if <0.65
+- Backend: FastAPI + Motor (MongoDB)
+- AI: Gemini 2.5-flash via emergentintegrations (EMERGENT_LLM_KEY)
+- Frontend (web preview): React + theme.js + faithful Expo UI port
+- Frontend (mobile): Expo SDK 54
 
-## Honestly-deferred (require ejecting Expo / weeks of work)
-- On-device Gemma 4 E2B (3 GB model + LiteRT/MediaPipe native modules)
-- LanceDB/FAISS on-device vector store
-- Real-time RAG against live Wikipedia/NASA/Khan APIs (each needs auth + rate limits)
-- Full Material You dynamic palette extraction (requires Android 12+ native API)
+## Backlog (P1)
+- Wire infinite-feed dedup into Quiz / Diagram / Experiment / Mission contexts
+- Populate `avoid_headlines` from recent registry (placeholder exists)
+- Verification pass on AI cards (already wired in `verify_card`, not yet enabled by default — saves Gemini cost)
+
+## Backlog (P2)
+- Offline mode UI: surface `from_stash` badge when MemoryBank serves
+- Admin dashboard for dedup stats (`/api/dedup/stats/{uid}` exists)
+- Re-enable Expo build (currently web preview only on platform)
 
 ## Smart business hook
-The verified-only generator + source citations make this credibly classroom-deployable — the foundation for a **B2B "STEMScroll for Schools" subscription** (curriculum-aligned mission packs, teacher dashboard).
+Verified-only generator + source citations → B2B "STEMScroll for Schools" subscription (curriculum-aligned mission packs, teacher dashboard).

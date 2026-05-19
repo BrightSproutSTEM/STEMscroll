@@ -10,6 +10,7 @@ Implements the Universal Non-Repeat Engine using MongoDB:
 
 import hashlib
 import json
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -231,7 +232,8 @@ async def get_dedup_stats(user_id: str, context: str) -> dict:
     buffer_size = await _db.recent_buffer.count_documents(
         {"user_id": user_id, "context": context})
     counters = await _db.unique_counter.find(
-        {"user_id": user_id, "context": context}
+        {"user_id": user_id, "context": context},
+        {"_id": 0},
     ).to_list(100)
     bank_size = await _db.memory_bank.count_documents({})
     return {
@@ -266,3 +268,38 @@ async def get_offline_cards(user_id: str, context: str, card_type: str,
             if len(approved) >= count:
                 break
     return approved
+
+
+async def serve_from_bank(user_id: str, context: str, count: int,
+                           categories: list = None) -> list:
+    """
+    Serve approved (not-yet-seen) cards from the memory bank.
+    Used when Gemini generation is slow / ingress would time out.
+    Categories filter is optional — if provided, prefer those subjects.
+    """
+    query: dict = {}
+    if categories:
+        query["category"] = {"$in": categories}
+
+    # Pull a larger pool so the dedup filter can find unseen cards.
+    candidates = await _db.memory_bank.find(query, {"_id": 0}) \
+        .sort("created_at", -1).limit(120).to_list(120)
+    random.shuffle(candidates)
+
+    approved = []
+    for item in candidates:
+        try:
+            card = json.loads(item["content"])
+        except Exception:
+            continue
+        result = await can_show_card(user_id, context, card)
+        if not result["allowed"]:
+            continue
+        await register_shown(user_id, context, card,
+                              result["hash"], result.get("is_new", True))
+        card["from_stash"] = True
+        approved.append(card)
+        if len(approved) >= count:
+            break
+    return approved
+
