@@ -7,6 +7,7 @@ import Missions from './components/Missions';
 import Library from './components/Library';
 import Explore from './components/Explore';
 import Profile from './components/Profile';
+import QuizMode from './components/QuizMode';
 import BottomNav from './components/BottomNav';
 import LevelUpOverlay from './components/LevelUpOverlay';
 
@@ -38,6 +39,7 @@ function AppShell() {
 
   const SCREENS = {
     feed:     <Feed />,
+    quiz:     <QuizMode />,
     missions: <Missions />,
     library:  <Library />,
     explore:  <Explore />,

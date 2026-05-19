@@ -37,8 +37,9 @@ Each card category has its own dedup namespace, so opening Quiz mode after a lon
 - User prompt injects up to 20 recent hashes + banned headlines as anti-repeat signal
 - Background generation pre-warms MemoryBank so subsequent fetches are instant
 
-### Frontend (`Feed.jsx`, `Missions.jsx`)
+### Frontend (`Feed.jsx`, `Missions.jsx`, `QuizMode.jsx`)
 - Feed: seed cards in <500ms, AI batches streamed in background, IntersectionObserver auto-prefetches 3 cards from the end
+- **Quiz Mode** (new tab 🧠): snap-scroll quiz-only feed via `?context=quiz`, in-session Score + 🔥 Streak HUD, best-streak badge, +XP on correct answers
 - Missions: opens with `getMissionCards(id, uid, extra=3)` → curated seeds + AI top-up
 - Topic pill shows live AI rotation (`✨ Streaming · physics · wave-particle duality`)
 - Client-side `seenIds` Set prevents re-rendering the same card

@@ -3,6 +3,7 @@ import { COLORS } from '../theme';
 
 const TABS = [
   { id: 'feed',     icon: '⚡', label: 'Feed' },
+  { id: 'quiz',     icon: '🧠', label: 'Quiz' },
   { id: 'missions', icon: '🎯', label: 'Missions' },
   { id: 'library',  icon: '📚', label: 'Library' },
   { id: 'explore',  icon: '✨', label: 'Explore' },

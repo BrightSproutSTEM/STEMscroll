@@ -24,10 +24,16 @@ function MascotAvatar({ mascot, size = 48, pose = 'default' }) {
 }
 
 // ── Quiz sub-component ────────────────────────────────────────────────────
-function QuizBody({ card, mascot }) {
+function QuizBody({ card, mascot, onAnswer }) {
   const [picked, setPicked] = useState(null);
   const correct = card.correctAnswer ?? 0;
   const isCorrect = picked === correct;
+
+  const choose = (idx) => {
+    if (picked !== null) return;
+    setPicked(idx);
+    if (onAnswer) onAnswer(idx === correct, card);
+  };
 
   return (
     <div>
@@ -46,7 +52,7 @@ function QuizBody({ card, mascot }) {
               key={idx}
               data-testid={`quiz-option-${idx}`}
               disabled={picked !== null}
-              onClick={() => setPicked(idx)}
+              onClick={() => choose(idx)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, background: bg, border: `1.5px solid ${borderColor}`, borderRadius: 16, padding: '14px', cursor: picked !== null ? 'default' : 'pointer', textAlign: 'left', transition: 'all 0.2s', width: '100%' }}
             >
               <span style={{ width: 28, height: 28, borderRadius: 14, background: 'rgba(255,255,255,0.12)', color: COLORS.textPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, flexShrink: 0 }}>
@@ -138,7 +144,7 @@ function DiagramBody({ card }) {
 }
 
 // ── Main STEMCard ─────────────────────────────────────────────────────────
-export default function STEMCard({ card, onSave, ageMode, isSaved: isSavedProp }) {
+export default function STEMCard({ card, onSave, ageMode, isSaved: isSavedProp, onQuizAnswer }) {
   const [saved, setSaved] = useState(isSavedProp || false);
   const [speaking, setSpeaking] = useState(false);
 
@@ -217,7 +223,7 @@ export default function STEMCard({ card, onSave, ageMode, isSaved: isSavedProp }
         <h2 data-testid={`card-headline-${card.id}`} style={S.headline}>{card.headline}</h2>
 
         {card.type === 'fact'       && <p data-testid={`card-body-${card.id}`} style={{ ...S.body, ...(ageMode === 'explorer' ? S.bodyLarge : {}) }}>{card.body}</p>}
-        {card.type === 'quiz'       && <QuizBody card={card} mascot={mascot} />}
+        {card.type === 'quiz'       && <QuizBody card={card} mascot={mascot} onAnswer={onQuizAnswer} />}
         {card.type === 'experiment' && <ExperimentBody card={card} />}
         {card.type === 'story'      && <p style={{ ...S.body, fontStyle: 'italic' }}>{card.body}</p>}
         {card.type === 'diagram'    && <DiagramBody card={card} />}
