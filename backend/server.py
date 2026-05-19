@@ -434,6 +434,35 @@ async def annealed_feed(user_id: str, limit: int = 50):
     return {"cards": pool[:limit], "total": len(pool[:limit])}
 
 
+# Map context name → (dedup CONTEXTS fn, allowed card types). When the context
+# is one of these focused modes, we restrict generation/serving to that type so
+# e.g. "quiz mode" never spits out fact cards by accident.
+CONTEXT_CARD_TYPES = {
+    "feed":       None,                       # mixed
+    "fact":       ["fact"],
+    "quiz":       ["quiz"],
+    "diagram":    ["diagram"],
+    "experiment": ["experiment"],
+    "story":      ["story"],
+}
+
+
+def _resolve_context(user_id: str, context: str) -> tuple[str, Optional[list]]:
+    """Return (dedup_context_key, allowed_card_types|None)."""
+    if context == "feed":
+        return dedup_service.CONTEXTS.FEED(user_id), None
+    if context == "quiz":
+        return dedup_service.CONTEXTS.QUIZ(user_id), ["quiz"]
+    if context == "diagram":
+        return dedup_service.CONTEXTS.DIAGRAM(user_id), ["diagram"]
+    if context == "experiment":
+        return dedup_service.CONTEXTS.EXPERIMENT(user_id), ["experiment"]
+    if context == "fact":
+        return dedup_service.CONTEXTS.FACT(user_id), ["fact"]
+    # mission_<id> handled by dedicated endpoint; fall through with raw key
+    return f"{context}_{user_id}", None
+
+
 # ──── Infinite Feed (Gemini + Deduplication) ────
 async def _generate_and_bank(
     user_id: str,
@@ -442,6 +471,7 @@ async def _generate_and_bank(
     topic: str,
     age_mode: str,
     count: int,
+    card_types: Optional[List[str]] = None,
 ):
     """Background job: call Gemini and let dedup filter+bank the results.
     Runs after the HTTP response is sent so the ingress timeout doesn't fire.
@@ -458,13 +488,16 @@ async def _generate_and_bank(
             count=count + 4,
             recent_hashes=recent_hashes,
             avoid_headlines=[],
+            card_types=card_types,
         )
+        # If the context demands a specific type, drop any drift from Gemini.
+        if card_types and raw_cards:
+            raw_cards = [c for c in raw_cards if c.get("type") in card_types]
         if raw_cards:
-            # filter_approved_cards also banks every accepted card into MemoryBank.
             approved = await dedup_service.filter_approved_cards(user_id, ctx_key, raw_cards)
-            log.info(f"BG gen banked {len(approved)} cards for {user_id} topic='{topic}'")
+            log.info(f"BG gen banked {len(approved)} cards for {user_id} ctx={ctx_key} topic='{topic}'")
     except Exception as e:
-        log.error(f"BG gen error for {user_id}: {e}")
+        log.error(f"BG gen error for {user_id} ctx={ctx_key}: {e}")
 
 
 @api.get("/feed/infinite/{user_id}")
@@ -476,38 +509,46 @@ async def infinite_feed(
     category: Optional[str] = None,
 ):
     """
-    Infinite feed endpoint — the core of the Non-Repeat Engine.
+    Universal infinite-feed endpoint. Works for `feed`, `quiz`, `diagram`,
+    `experiment`, `fact`, `story`. Each context has its OWN dedup namespace
+    so opening Quiz mode after a long feed session still surfaces fresh quizzes.
 
     Pipeline (non-blocking — must respond before ingress timeout):
-    1. Look up next topic + category to cover (rotation, no repeats).
-    2. Serve unseen cards from MemoryBank (filtered through the 3-gate dedup).
-    3. Top-up with seed cards if bank is thin.
-    4. Schedule a Gemini generation in the background that will populate
-       the MemoryBank for the next request.
+    1. Resolve context → (dedup key, allowed card_types).
+    2. Pick next topic + category not recently covered for THIS context.
+    3. Serve unseen cards from MemoryBank (type-filtered) through the 3-gate dedup.
+    4. Top-up with seed cards (also type-filtered) if bank is thin.
+    5. Schedule a Gemini generation in the background that populates the bank.
     """
     user = await _get_or_create_user(user_id)
     age_mode = user.get("age_mode", "discoverer")
     user_topics = user.get("selected_topics", [])
 
-    ctx_key = dedup_service.CONTEXTS.FEED(user_id) if context == "feed" else f"{context}_{user_id}"
+    ctx_key, allowed_types = _resolve_context(user_id, context)
 
-    # Pick next category and topic for this round.
+    # Pick next category and topic for THIS context (per-context topic rotation).
     chosen_category = category or await topic_rotation.get_next_category(user_id, ctx_key, user_topics)
     topic = await topic_rotation.get_next_topic(chosen_category, user_id, ctx_key)
 
-    # Build the response NOW using already-banked content + seeds.
+    # 1) Try the bank first (preferred category + type).
     pref_cats = [chosen_category] + (user_topics or [])
-    approved = await dedup_service.serve_from_bank(user_id, ctx_key, count, categories=pref_cats)
+    approved = await dedup_service.serve_from_bank(
+        user_id, ctx_key, count, categories=pref_cats, card_types=allowed_types,
+    )
     ai_served = len(approved)
 
+    # 2) Widen: any category, still type-filtered.
     if len(approved) < count:
-        # Try the bank again with no category restriction.
-        more = await dedup_service.serve_from_bank(user_id, ctx_key, count - len(approved))
+        more = await dedup_service.serve_from_bank(
+            user_id, ctx_key, count - len(approved), card_types=allowed_types,
+        )
         approved.extend(more)
 
+    # 3) Seed fallback — also filter by allowed types when context is focused.
     if len(approved) < count:
-        # Final fallback: seed cards through the dedup filter.
         seed_pool = [c for c in SEED_CARDS]
+        if allowed_types:
+            seed_pool = [c for c in seed_pool if c.get("type") in allowed_types]
         random.shuffle(seed_pool)
         seed_filtered = await dedup_service.filter_approved_cards(user_id, ctx_key, seed_pool[:30])
         approved.extend(seed_filtered)
@@ -517,12 +558,12 @@ async def infinite_feed(
     # Schedule Gemini generation in the background — populates bank for next call.
     background_tasks.add_task(
         _generate_and_bank,
-        user_id, ctx_key, chosen_category, topic, age_mode, count,
+        user_id, ctx_key, chosen_category, topic, age_mode, count, allowed_types,
     )
 
     log.info(
-        f"Infinite feed: user={user_id} ctx={ctx_key} topic='{topic}' "
-        f"from_bank={ai_served} total_returned={len(result)} bg_gen=scheduled"
+        f"Infinite {context}: user={user_id} ctx={ctx_key} topic='{topic}' "
+        f"types={allowed_types or 'mixed'} from_bank={ai_served} total={len(result)}"
     )
 
     return {
@@ -533,6 +574,7 @@ async def infinite_feed(
         "ai_generated": ai_served > 0,
         "from_bank": ai_served,
         "context": ctx_key,
+        "card_types": allowed_types,
     }
 
 
@@ -546,6 +588,52 @@ async def generate_feed_batch(
 ):
     """Force-generate a fresh batch via Gemini (used for pre-fetching)."""
     return await infinite_feed(user_id, background_tasks, context=context, count=count, category=category)
+
+
+# ──── Mission cards (per-mission dedup + AI top-up) ────
+@api.get("/missions/{mission_id}/cards/{user_id}")
+async def get_mission_cards(
+    mission_id: str,
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    extra: int = Query(default=3, ge=0, le=10),
+):
+    """Return the seeded mission cards PLUS up to `extra` fresh AI cards on the
+    mission's subject. Each mission has its own dedup namespace so revisiting
+    one shows new material every time.
+    """
+    m = next((x for x in MISSIONS if x["id"] == mission_id), None)
+    if not m:
+        raise HTTPException(404, "Mission not found")
+
+    await _get_or_create_user(user_id)
+    ctx_key = dedup_service.CONTEXTS.MISSION(user_id, mission_id)
+    subject = m.get("subject", "biology")
+
+    # 1) Seed cards from the mission roster — always shown, even if previously seen
+    #    (they're the curated curriculum core).
+    base_cards = [SEED_BY_ID[cid] for cid in m["cardIds"] if cid in SEED_BY_ID]
+
+    # 2) AI top-up from bank (mission subject, any card type).
+    extras = []
+    if extra > 0:
+        extras = await dedup_service.serve_from_bank(
+            user_id, ctx_key, extra, categories=[subject],
+        )
+        # Schedule background Gemini gen for this mission's namespace.
+        topic = await topic_rotation.get_next_topic(subject, user_id, ctx_key)
+        background_tasks.add_task(
+            _generate_and_bank,
+            user_id, ctx_key, subject, topic,
+            "discoverer", extra, None,
+        )
+
+    return {
+        **m,
+        "cards": base_cards + extras,
+        "ai_extras": len(extras),
+        "context": ctx_key,
+    }
 
 
 @api.get("/dedup/stats/{user_id}")

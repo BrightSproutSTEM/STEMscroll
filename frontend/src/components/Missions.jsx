@@ -19,8 +19,16 @@ export default function Missions() {
 
   const openMission = async (m) => {
     setActiveMission(m); setCardIdx(0); setLoadingCards(true);
-    try { const c = await api.getMission(m.id); setMissionCards(Array.isArray(c) ? c : []); }
-    catch (_) { setMissionCards([]); }
+    try {
+      // Dedup-aware mission cards: seeded curriculum + fresh AI top-up per user.
+      const c = await api.getMissionCards(m.id, uid, 3);
+      setMissionCards(Array.isArray(c) ? c : []);
+    }
+    catch (_) {
+      // Fallback to plain seed cards if the dedup endpoint fails.
+      try { const c2 = await api.getMission(m.id); setMissionCards(Array.isArray(c2) ? c2 : []); }
+      catch (__) { setMissionCards([]); }
+    }
     finally { setLoadingCards(false); }
   };
 

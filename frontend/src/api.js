@@ -27,6 +27,8 @@ export const api = {
   recordSkip: (uid, cardId)           => req('POST', `/user/${uid}/skip`, { card_id: cardId }),
   getMissions: ()                     => req('GET', '/missions').then(d => d.missions || d),
   getMission: (id)                    => req('GET', `/missions/${id}`).then(d => d.cards || d),
+  getMissionCards: (id, uid, extra = 3) =>
+    req('GET', `/missions/${id}/cards/${uid}?extra=${extra}`).then(d => d.cards || []),
   generateCard: (uid, subjectFilter, ageMode) =>
     req('POST', '/cards/generate', { user_id: uid, subject_filter: subjectFilter, age_mode: ageMode }),
   getAnnealedFeed: (uid)             => req('GET', `/user/${uid}/annealed-feed`).then(d => d.cards || d),

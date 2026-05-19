@@ -271,15 +271,18 @@ async def get_offline_cards(user_id: str, context: str, card_type: str,
 
 
 async def serve_from_bank(user_id: str, context: str, count: int,
-                           categories: list = None) -> list:
+                           categories: list = None,
+                           card_types: list = None) -> list:
     """
     Serve approved (not-yet-seen) cards from the memory bank.
     Used when Gemini generation is slow / ingress would time out.
-    Categories filter is optional — if provided, prefer those subjects.
+    Categories and card_types filters are optional — if provided, narrow the pool.
     """
     query: dict = {}
     if categories:
         query["category"] = {"$in": categories}
+    if card_types:
+        query["card_type"] = {"$in": card_types}
 
     # Pull a larger pool so the dedup filter can find unseen cards.
     candidates = await _db.memory_bank.find(query, {"_id": 0}) \

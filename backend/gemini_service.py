@@ -6,6 +6,7 @@ to generate batches of unique STEM cards. Anti-repeat hashes are injected
 into every prompt so Gemini avoids previously-seen content.
 """
 
+import asyncio
 import json
 import logging
 import random
@@ -195,7 +196,14 @@ class GeminiService:
 
         raw_text = ""
         try:
-            raw_text = await chat.send_message(UserMessage(text=prompt_text))
+            # litellm.completion (inside LlmChat.send_message) is BLOCKING.
+            # Push it to a thread so we don't freeze the FastAPI event loop
+            # while background-generation runs.
+            def _blocking_send() -> str:
+                return asyncio.new_event_loop().run_until_complete(
+                    chat.send_message(UserMessage(text=prompt_text))
+                )
+            raw_text = await asyncio.to_thread(_blocking_send)
             cards = _parse_cards(raw_text)
         except json.JSONDecodeError as e:
             log.error(f"Gemini JSON parse error: {e} — raw: {raw_text[:300]}")
@@ -243,9 +251,11 @@ class GeminiService:
         ).with_model(PROVIDER, MODEL).with_params(temperature=0.1, max_tokens=256)
 
         try:
-            raw = await chat.send_message(
-                UserMessage(text=f"Verify this card:\n{json.dumps(card)}")
-            )
+            def _blocking_verify() -> str:
+                return asyncio.new_event_loop().run_until_complete(
+                    chat.send_message(UserMessage(text=f"Verify this card:\n{json.dumps(card)}"))
+                )
+            raw = await asyncio.to_thread(_blocking_verify)
             raw = _strip_fences(raw)
             return json.loads(raw)
         except Exception as e:
