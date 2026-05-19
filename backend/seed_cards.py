@@ -252,7 +252,7 @@ SEED_CARDS = [
      "source": "Scientific American", "xpValue": 5, "mascot": "drSprout"},
 
     {"id": "f16", "type": "fact", "subject": "astronomy", "ageMode": "scientist",
-     "emoji": "⚫", "headline": "Black holes can sing",
+     "emoji": "🎵", "headline": "Black holes can sing",
      "body": "A black hole in the Perseus galaxy cluster emits pressure waves through gas — translated to sound, it's a B-flat 57 octaves below middle C. The lowest note known.",
      "source": "NASA Chandra", "xpValue": 5, "mascot": "drSprout"},
 
@@ -347,6 +347,35 @@ SEED_CARDS = [
      "emoji": "📡", "headline": "You are a signal",
      "body": "You're a message on a phone. You jump from a tower to a satellite 35,000 km above Earth. The satellite shoots you back down to another tower across the world. Then through underground cables — at the speed of light — into someone else's phone. All in 0.1 seconds.",
      "source": "ITU", "xpValue": 10, "mascot": "zoomerroo"},
+
+    # ─── New cards (reaching 50+) ────────────────────────────────────────
+    {"id": "f21", "type": "fact", "subject": "biology", "ageMode": "explorer",
+     "emoji": "🦋", "headline": "Butterflies taste with their feet!",
+     "body": "Butterflies have taste sensors on their feet. When they land on a leaf, they can instantly tell if it's good to eat — or the right plant to lay eggs on.",
+     "source": "National Geographic Kids", "xpValue": 5, "mascot": "sprouty"},
+
+    {"id": "f22", "type": "fact", "subject": "maths", "ageMode": "discoverer",
+     "emoji": "🔢", "headline": "Zero was invented — and it changed the world",
+     "body": "Ancient Babylonians and Mayans used placeholder zeros, but the Indian mathematician Brahmagupta (628 CE) was first to define zero as a proper number with rules. Without zero, computers, calculus, and modern physics couldn't exist.",
+     "source": "Wolfram MathWorld", "xpValue": 5, "mascot": "zoomerroo"},
+
+    {"id": "q10", "type": "quiz", "subject": "chemistry", "ageMode": "explorer",
+     "emoji": "🧊", "headline": "Why does ice float on water?",
+     "body": "Most solids sink in their own liquid. Ice is special — it floats! Why?",
+     "quizOptions": ["Ice is lighter because it is cold", "Ice is less dense due to its crystal structure", "Ice has air bubbles trapped inside"],
+     "correctAnswer": 1,
+     "explanation": "Water expands as it freezes, forming an open hexagonal crystal lattice that is less dense than liquid water. This is why pipes burst in winter — and why lakes freeze from the top, letting fish survive below!",
+     "xpValue": 10, "mascot": "quizzle"},
+
+    {"id": "d6", "type": "diagram", "subject": "engineering", "ageMode": "discoverer",
+     "emoji": "🚀", "headline": "How a rocket reaches orbit",
+     "body": "Rockets don't 'fly up' to orbit — they fly sideways so fast that by the time they fall back toward Earth, the ground curves away beneath them. Orbit is controlled falling!",
+     "diagramParts": [
+         {"label": "Stage 1 (Booster)", "desc": "Burns most fuel to escape atmosphere"},
+         {"label": "Stage 2 (Main engine)", "desc": "Reaches ~28,000 km/h sideways"},
+         {"label": "Orbit", "desc": "Constant free-fall around Earth"},
+     ],
+     "source": "NASA", "xpValue": 10, "mascot": "drSprout"},
 ]
 
 for _c in SEED_CARDS:

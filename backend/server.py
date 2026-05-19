@@ -13,6 +13,7 @@ import os
 import random
 import uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
@@ -35,9 +36,6 @@ db = client[os.environ["DB_NAME"]]
 
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 
-app = FastAPI(title="STEMScroll API")
-api = APIRouter(prefix="/api")
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("stemscroll")
 
@@ -50,6 +48,17 @@ for c in SEED_CARDS:
     c.setdefault("source_url", "")
 
 SEED_BY_ID = {c["id"]: c for c in SEED_CARDS}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup / shutdown lifecycle handler (replaces deprecated on_event)."""
+    yield
+    client.close()
+
+
+app = FastAPI(title="STEMScroll API", lifespan=lifespan)
+api = APIRouter(prefix="/api")
 
 
 # ─────────────────────────────────────────── Models
@@ -438,8 +447,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    client.close()

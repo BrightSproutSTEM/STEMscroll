@@ -12,7 +12,7 @@ A vertical-scroll STEM knowledge "doom scroller" mobile app (Expo React Native) 
 - **Library / Missions / Explore / Profile** tabs
 - **AI Card Generation** (Claude Sonnet 4.5)
 
-## Production-grade enhancements (this iteration)
+## Production-grade enhancements (shipped)
 ### Hallucination prevention pipeline (3-layer)
 - Every seed card carries `confidence` (0.0–1.0), `verified` boolean, `last_verified`, `source_url`
 - AI generation runs a **two-step Claude pipeline**: generate → second Claude self-verifies → score; if confidence <0.65, the card is rejected and logged to `rejected_generations`; <0.85 surfaces as "CHECK WITH A GROWN-UP" instead of "VERIFIED"
@@ -23,17 +23,26 @@ A vertical-scroll STEM knowledge "doom scroller" mobile app (Expo React Native) 
 
 ### Annealing / self-learning
 - View dwell-time → if user swiped past in <2.2s, backend records a **skip** signal
-- New `/api/user/{uid}/annealed-feed` endpoint scores cards by `confidence + saves_by_subject*0.15 − skips_by_subject*0.08 + small randomness` (high-temperature exploration cools as engagement data accumulates)
+- New `/api/user/{uid}/annealed-feed` endpoint scores cards by `confidence + saves_by_subject*0.15 − skips_by_subject*0.08 + small randomness`
 - Saved cards excluded from feed (novelty bias)
 
 ### Connectivity intelligence
-- Frontend polls `/api/` every 15s — top bar shows green **🟢 LIVE** pill or amber **OFFLINE** pill
-- Architecturally ready for offline Gemma-4 layer (placeholder; on-device LLM requires native modules + ejecting Expo Go)
+- Frontend polls `/api/` every 15s — top bar shows green **LIVE** pill or amber **OFFLINE** pill
 
 ### Accessibility
 - **Read-aloud TTS** button on every card (expo-speech, slower rate for Explorer mode)
 - Skeleton loader matches card shape during fetch
 - WCAG-friendly contrast, 44pt+ touch targets, `accessibilityLabel`s
+
+## Bug fixes (latest iteration)
+| # | Fix | File |
+|---|-----|------|
+| 1 | `app.json` splash-icon.png → splash-image.png (EAS build crash fix) | `frontend/app.json` |
+| 2 | App name/slug/scheme "frontend" → "STEMScroll"/"stemscroll" | `frontend/app.json` |
+| 3 | Card f16 emoji `⚫` (invisible on dark bg) → `🎵` | `backend/seed_cards.py` |
+| 4 | Ionicons font loading: explicit preload via `useFonts` + `SplashScreen` | `frontend/app/_layout.tsx` |
+| 5 | FastAPI deprecated `@app.on_event('shutdown')` → `lifespan` handler | `backend/server.py` |
+| 6 | Seed cards 46 → 50 (added f21, f22, q10, d6) | `backend/seed_cards.py` |
 
 ## Tech
 - Frontend: Expo SDK 54, expo-router, expo-speech, expo-haptics, react-native-reanimated, expo-linear-gradient
@@ -44,7 +53,6 @@ A vertical-scroll STEM knowledge "doom scroller" mobile app (Expo React Native) 
 - On-device Gemma 4 E2B (3 GB model + LiteRT/MediaPipe native modules)
 - LanceDB/FAISS on-device vector store
 - Real-time RAG against live Wikipedia/NASA/Khan APIs (each needs auth + rate limits)
-- 5,000-card hand-curated bank (current: 46 high-confidence verified facts; AI-extension active)
 - Full Material You dynamic palette extraction (requires Android 12+ native API)
 
 ## Smart business hook
