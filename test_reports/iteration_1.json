@@ -1,0 +1,70 @@
+{
+  "summary": "Full backend and frontend testing of STEMScroll app. Backend: 13/14 tests pass. Frontend: Core flows working (onboarding 4-steps, feed with STEM cards, missions, library). Critical issue: 'Made with Emergent' badge overlaps Explore/Me nav tabs blocking user clicks.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/user/{uid}/saved",
+        "issue": "Returns {cards: [...]} but api.js used d.saved || d causing Library to receive object not array. Fixed in api.js to use d.saved || d.cards || d and map to card_data.",
+        "priority": "MEDIUM - Fixed by tester"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "BottomNav - Explore & Me tabs",
+        "issue": "'Made with Emergent' badge (fixed position bottom-right) overlaps Explore and Me nav tabs, intercepting click events. playwright force=True doesn't bypass the badge; JS .click() works.",
+        "selector": "[data-testid='nav-explore'], [data-testid='nav-me']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "Feed - Save toast",
+        "issue": "Toast data-testid is 'save-toast' not 'toast'. Minor naming inconsistency. Save functionality works - toast appears visually.",
+        "selector": "[data-testid='save-toast']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Library - saved cards",
+        "issue": "After api.js fix, saved cards from API (returned as {cards: [...]}) now correctly map to card_data. Before fix, Library showed 0 cards even when cards were saved.",
+        "affected_selectors": ["[data-testid='library-screen']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Bottom Navigation",
+        "issues": ["Made with Emergent badge overlaps right side of bottom nav (Explore + Me tabs) on mobile viewport 390px"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stemscroll.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix 'Made with Emergent' badge z-index or position so it doesn't block Explore/Me nav tab clicks on 390px mobile viewport. Consider moving badge or adjusting nav bar padding.",
+    "Verify Library now shows saved cards after api.js getSaved fix (maps card_data)"
+  ],
+  "critical_code_review_comments": [
+    "api.js getSaved: returned d.saved but backend uses 'cards' key - mismatch. Fixed.",
+    "Mission items data-testid is mission-${m.id} (correct), but Missions component does not have a loading/error state for the missions list fetch failures.",
+    "Generate card (Explore) calls /api/cards/generate - should verify this endpoint exists and works (uses Gemini AI)."
+  ],
+  "updated_files": [
+    "/app/frontend/src/api.js"
+  ],
+  "success_rate": {
+    "backend": "93% (13/14 tests pass; 1 minor - fixed)",
+    "frontend": "75% (Onboarding✅ Feed✅ Missions✅ Library✅ Quiz✅ Save✅ Explore❌blocked Me❌blocked)"
+  },
+  "seed_data_creation": "Backend seeded via API calls. Test UID: test_user_t1_001 (onboarded)",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Key test UID: test_user_t1_001 (already onboarded). Use localStorage.setItem('stemscroll_uid', 'test_user_t1_001') before reload to skip onboarding. Main issue: Made with Emergent badge blocks Explore/Me nav. api.js getSaved fix was applied. Test with mission detail click using data-testid='mission-${id}' (not mission-item-${id}).",
+  "rca_of_issues": {
+    "saved_cards_library_bug": "Backend GET /api/user/{uid}/saved returns {cards: [...]} but api.js expected d.saved key. Result: Library received full response object, Array.isArray check failed, showed empty state. Fix: api.js now uses d.saved || d.cards || d and maps each item to s.card_data || s to flatten the saved doc structure.",
+    "nav_tab_blocked": "Made with Emergent widget renders at fixed position bottom-right with high z-index, overlapping the Explore and Me nav tabs on 390px viewport. The badge is ~156px wide and positioned right:0, covering the last two tabs of the 5-tab nav."
+  }
+}
