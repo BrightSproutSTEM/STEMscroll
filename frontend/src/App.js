@@ -70,6 +70,6 @@ const splash = {
 };
 
 const appStyles = {
-  root: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#0B0F2E', maxWidth: 480, margin: '0 auto', boxShadow: '0 0 80px rgba(0,0,0,0.6)' },
+  root: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#0B0F2E', maxWidth: 480, margin: '0 auto', boxShadow: '0 0 80px rgba(0,0,0,0.6)', position: 'relative' },
   content: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
 };
